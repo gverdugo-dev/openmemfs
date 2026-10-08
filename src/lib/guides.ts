@@ -2,7 +2,7 @@ import { Marked } from 'marked'
 
 /**
  * The guides live once, as Markdown in docs/guides/ (NN-slug.md), and are read by two
- * readers: the Guides view of the app and the static site (scripts/site.ts). This module is
+ * readers: the Guides view of the app and the website of openmemfs, built elsewhere. This module is
  * what both share, so a guide reads the same everywhere.
  */
 export interface Guide {

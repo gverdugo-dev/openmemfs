@@ -92,15 +92,15 @@ tab: it is for agents, through the API and the tools (the history shows how it c
 ## Guides and the website
 
 The guides are Markdown in `docs/guides/NN-slug.md`, one per file, in reading order, and they
-are the only copy. Two readers share `src/lib/guides.ts` (`readGuides`, `guideHtml`): the
-**Guides** view of the app (`?view=guides&guide=<slug>`, `src/components/Guides.tsx`, bundled
-with `import.meta.glob`) and the website, built by `bun run site` (`scripts/site/build.ts`) into
-`site-dist/` and pushed to the `gh-pages` branch by `bun run site:publish`
-(`scripts/site/publish.ts`), which GitHub Pages serves at `openmemfs.gonzaloverdugo.com` (the
-`CNAME` is written by the build). There is no CI and no workflow, on purpose: keep it that way.
-Link between guides with their file name (`[Deploy it](06-deploy.md)`) and to the repository with `../../<path>`; both
-readers rewrite them. A code snippet in a guide is tested before it is committed. The website
-has its own `scripts/site/site.css`, copied from the app's tokens.
+are the only copy. The **Guides** view of the app (`?view=guides&guide=<slug>`,
+`src/components/Guides.tsx`, bundled with `import.meta.glob`) reads them with `src/lib/guides.ts`
+(`readGuides`, `guideHtml`), and so does the website at `openmemfs.gonzaloverdugo.com`, which is
+built in a repository of its own so this one holds only what someone who deploys it uses. Link
+between guides with their file name (`[Deploy it](06-deploy.md)`) and to the repository with
+`../../<path>`; both readers rewrite them. A code snippet in a guide is tested before it is
+committed.
+
+There is no CI and no workflow, on purpose: keep it that way.
 
 ## Commands
 
@@ -111,8 +111,6 @@ bun run build        # the app into .output/
 bun run start        # the built server (PORT, default 3000)
 bun run migrate      # apply pending migrations and exit
 bun run check        # tsc --noEmit and bun test
-bun run site         # the website into site-dist/ (the presentation and the guides)
-bun run site:publish # build it and push it to the gh-pages branch
 docker compose up    # Postgres and the app on 127.0.0.1:8080
 ```
 
