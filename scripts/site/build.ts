@@ -1,6 +1,6 @@
 /**
  * Builds the website: a presentation of openmemfs and the guides of docs/guides/, the same files
- * the app shows. Static HTML into site-dist/, published by .github/workflows/pages.yml.
+ * the app shows. Static HTML into site-dist/, published with `bun run site:publish`.
  *
  *   bun scripts/site/build.ts && bunx serve site-dist
  */

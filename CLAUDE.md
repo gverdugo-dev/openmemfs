@@ -81,6 +81,10 @@ migrations/          core SQL migrations (NNNN_name.sql)
 regenerate it with `tsr generate`, which drops the Start registration. Import from `src` with
 `#/...` (`#/lib/api`, `#/server/errors`).
 
+Content shows a file's YAML frontmatter as properties and never passes it through TipTap
+(`src/modules/content/frontmatter.ts` splits it off and puts it back verbatim); its Markdown view
+edits the file as stored, and Copy file copies it whole.
+
 Content and History are modules like any other. Read them before writing a new one:
 `src/modules/content` is front only, `src/modules/history` has all three parts. Metadata has no
 tab: it is for agents, through the API and the tools (the history shows how it changed).
@@ -91,9 +95,10 @@ The guides are Markdown in `docs/guides/NN-slug.md`, one per file, in reading or
 are the only copy. Two readers share `src/lib/guides.ts` (`readGuides`, `guideHtml`): the
 **Guides** view of the app (`?view=guides&guide=<slug>`, `src/components/Guides.tsx`, bundled
 with `import.meta.glob`) and the website, built by `bun run site` (`scripts/site/build.ts`) into
-`site-dist/` and published to GitHub Pages by `.github/workflows/pages.yml` at
-`openmemfs.gonzaloverdugo.com` (the `CNAME` is written by the build). Link between guides with
-their file name (`[Deploy it](06-deploy.md)`) and to the repository with `../../<path>`; both
+`site-dist/` and pushed to the `gh-pages` branch by `bun run site:publish`
+(`scripts/site/publish.ts`), which GitHub Pages serves at `openmemfs.gonzaloverdugo.com` (the
+`CNAME` is written by the build). There is no CI and no workflow, on purpose: keep it that way.
+Link between guides with their file name (`[Deploy it](06-deploy.md)`) and to the repository with `../../<path>`; both
 readers rewrite them. A code snippet in a guide is tested before it is committed. The website
 has its own `scripts/site/site.css`, copied from the app's tokens.
 
@@ -107,6 +112,7 @@ bun run start        # the built server (PORT, default 3000)
 bun run migrate      # apply pending migrations and exit
 bun run check        # tsc --noEmit and bun test
 bun run site         # the website into site-dist/ (the presentation and the guides)
+bun run site:publish # build it and push it to the gh-pages branch
 docker compose up    # Postgres and the app on 127.0.0.1:8080
 ```
 
