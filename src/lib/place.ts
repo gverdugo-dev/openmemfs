@@ -6,8 +6,10 @@ export interface Place {
   tab?: string
   /** A module page, instead of a file. */
   page?: string
-  /** A view of the core instead of a file: search, the folder page, tags and categories. */
-  view?: 'search' | 'folder' | 'organize'
+  /** A view of the core instead of a file: search, the folder page, tags and categories, the guides. */
+  view?: 'search' | 'folder' | 'organize' | 'guides'
+  /** The open guide, by its slug, on the guides view. */
+  guide?: string
   /** The open folder, with its trailing slash, on the folder view. */
   folder?: string
   /** How the folder view lays out its folders and files: blocks (the default) or rows. */
@@ -33,7 +35,8 @@ export function placeOf(search: Record<string, unknown>): Place {
     path: text(search.path),
     tab: text(search.tab),
     page: text(search.page),
-    view: oneOf(search.view, ['search', 'folder', 'organize'] as const),
+    view: oneOf(search.view, ['search', 'folder', 'organize', 'guides'] as const),
+    guide: text(search.guide),
     folder: text(search.folder),
     layout: oneOf(search.layout, ['grid', 'list'] as const),
     q: text(search.q),

@@ -3,7 +3,7 @@ import { type ReactNode, useMemo, useState } from 'react'
 import type { Entry } from '#/lib/api'
 import type { ModulePage } from '#/lib/module'
 import type { Place } from '#/lib/place'
-import { FileIcon, FolderIcon, SearchIcon, TagIcon } from './Icons'
+import { BookIcon, FileIcon, FolderIcon, SearchIcon, TagIcon } from './Icons'
 import { Logo } from './Logo'
 import { type Dragged, dragProps, useDropTarget } from './Move'
 import { NewFile, NewFolder } from './NewFile'
@@ -81,6 +81,9 @@ export function Sidebar({ entries, folders, place, pages }: Props) {
       <nav className="border-t border-line px-2 py-2">
         <Row search={{ view: 'search' }} active={place.view === 'search'} depth={0} icon={<SearchIcon />}>
           Search
+        </Row>
+        <Row search={{ view: 'guides' }} active={place.view === 'guides'} depth={0} icon={<BookIcon />}>
+          Guides
         </Row>
         <Row search={{ view: 'organize' }} active={place.view === 'organize'} depth={0} icon={<TagIcon />}>
           Tags & categories

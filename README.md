@@ -38,6 +38,14 @@ extended by modules.
 - **Conflicts**: if an agent changes a file you have open, nothing is overwritten; you choose.
 - **Modules**: new tabs, pages, routes and tables live in `src/modules/`, each in its own folder.
 
+## Guides
+
+Short and in order, in [`docs/guides/`](docs/guides/01-your-context.md): why it exists, connecting
+your agent, an `organisation.md` every harness reads, extending it, adding authentication and
+deploying it. The app shows them under **Guides** in the sidebar, and the website
+(https://openmemfs.gonzaloverdugo.com) publishes them with a presentation of the project: one
+source, three readers.
+
 ## How to use it
 
 With Docker:
@@ -100,6 +108,7 @@ Postgres, and runs wherever those do.
 
 ## More information
 
+- [The guides](docs/guides/01-your-context.md) and the website, https://openmemfs.gonzaloverdugo.com.
 - [CLAUDE.md](CLAUDE.md): the whole API, the MCP tools, the data model and how to
   write a module.
 - `.env.example`: every variable the server reads.

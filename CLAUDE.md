@@ -84,6 +84,18 @@ Content and History are modules like any other. Read them before writing a new o
 `src/modules/content` is front only, `src/modules/history` has all three parts. Metadata has no
 tab: it is for agents, through the API and the tools (the history shows how it changed).
 
+## Guides and the website
+
+The guides are Markdown in `docs/guides/NN-slug.md`, one per file, in reading order, and they
+are the only copy. Two readers share `src/lib/guides.ts` (`readGuides`, `guideHtml`): the
+**Guides** view of the app (`?view=guides&guide=<slug>`, `src/components/Guides.tsx`, bundled
+with `import.meta.glob`) and the website, built by `bun run site` (`scripts/site/build.ts`) into
+`site-dist/` and published to GitHub Pages by `.github/workflows/pages.yml` at
+`openmemfs.gonzaloverdugo.com` (the `CNAME` is written by the build). Link between guides with
+their file name (`[Deploy it](06-deploy.md)`) and to the repository with `../../<path>`; both
+readers rewrite them. A code snippet in a guide is tested before it is committed. The website
+has its own `scripts/site/site.css`, copied from the app's tokens.
+
 ## Commands
 
 ```bash
@@ -93,6 +105,7 @@ bun run build        # the app into .output/
 bun run start        # the built server (PORT, default 3000)
 bun run migrate      # apply pending migrations and exit
 bun run check        # tsc --noEmit and bun test
+bun run site         # the website into site-dist/ (the presentation and the guides)
 docker compose up    # Postgres and the app on 127.0.0.1:8080
 ```
 
@@ -134,7 +147,7 @@ at a database with data.
 ## No access control
 
 There is no login, no token and no users, on purpose: the core stays minimal and access control
-is left to whoever deploys it (guides will show how). Whoever reaches the server reads and writes
+is left to whoever deploys it (`docs/guides/05-authentication.md` shows how). Whoever reaches the server reads and writes
 everything, through the pages, `/api` and `/mcp`. Do not add a check to the core; a way to close
 it belongs in a module or in the deployment.
 

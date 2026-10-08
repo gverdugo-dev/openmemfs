@@ -1,0 +1,90 @@
+/*
+ * The website in the app's sketchbook: black ink on white paper, 2px outlines, Inter 800 for
+ * headings and Poppins for reading. The values copy the tokens of src/styles.css; the dark theme
+ * follows the system.
+ */
+:root {
+  --ink: #000;
+  --paper: #fff;
+  --body-ink: #353535;
+  --ink-2: rgb(0 0 0 / 72%);
+  --ink-3: rgb(0 0 0 / 62%);
+  --line: rgb(0 0 0 / 11%);
+  --line-strong: rgb(0 0 0 / 22%);
+  --wash: #f4f4f4;
+  --marker-soft: rgb(0 0 0 / 14%);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #f2f2f0;
+    --paper: #161616;
+    --body-ink: #d4d4d2;
+    --ink-2: rgb(255 255 255 / 72%);
+    --ink-3: rgb(255 255 255 / 58%);
+    --line: rgb(255 255 255 / 12%);
+    --line-strong: rgb(255 255 255 / 24%);
+    --wash: #1f1f1f;
+    --marker-soft: rgb(255 255 255 / 18%);
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--body-ink); font: 17px/1.7 Poppins, ui-sans-serif, system-ui, sans-serif; }
+h1, h2, h3, .logo, .btn, .kicker, .top nav a { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: var(--ink); }
+h1, h2, h3 { font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; }
+a { color: var(--ink); }
+.marker { background: linear-gradient(transparent 62%, var(--marker-soft) 62%); }
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1080px; margin: 0 auto; padding: 20px 16px; }
+.top a { text-decoration: none; }
+.top nav { display: flex; gap: 20px; }
+.top nav a { font-weight: 700; font-size: 15px; }
+.logo { display: inline-flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px 64px; }
+.hero { max-width: 760px; padding: 48px 0 32px; }
+.hero h1 { font-size: clamp(36px, 6vw, 58px); margin: 0; }
+.lead { font-size: 19px; margin: 24px 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0; }
+.btn { display: inline-flex; align-items: center; min-height: 44px; padding: 0 20px; border: 2px solid var(--ink); border-radius: 10px; background: var(--paper); font-weight: 700; font-size: 15px; text-decoration: none; }
+.btn-primary { background: var(--ink); color: var(--paper); }
+
+pre { overflow-x: auto; margin: 0; padding: 16px 18px; border: 2px solid var(--ink); border-radius: 12px; background: var(--paper); color: var(--ink); font: 13.5px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; }
+:not(pre) > code { padding: 0.12em 0.38em; border-radius: 6px; background: var(--wash); color: var(--ink); font: 0.86em ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.points { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 32px 0 56px; }
+.points div { padding: 20px; border: 2px solid var(--ink); border-radius: 12px; }
+.points h2 { font-size: 20px; margin: 0 0 6px; }
+.points p { margin: 0; font-size: 15px; }
+.section { font-size: 30px; margin: 0; }
+.muted { color: var(--ink-3); }
+
+.guides { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 8px; }
+.guides a { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 2px solid var(--line-strong); border-radius: 10px; text-decoration: none; font-weight: 500; }
+.guides a:hover { border-color: var(--ink); }
+.guides [aria-current] a { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.guides .n { font-family: Inter, sans-serif; font-weight: 800; min-width: 1.2em; }
+
+.guide { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 48px; padding-top: 24px; }
+.guide aside .guides { position: sticky; top: 24px; margin: 0; font-size: 14px; }
+.guide article { max-width: 720px; }
+.guide h1 { font-size: clamp(32px, 5vw, 44px); margin: 4px 0 24px; }
+.kicker { margin: 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+@media (max-width: 800px) {
+  .guide { grid-template-columns: 1fr; gap: 24px; }
+  .guide aside .guides { position: static; }
+}
+
+.prose > * + * { margin-top: 0.9em; }
+.prose h2 { font-size: 26px; margin-top: 1.8em; }
+.prose h3 { font-size: 20px; margin-top: 1.5em; }
+.prose a { font-weight: 500; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.prose strong { color: var(--ink); font-weight: 600; }
+.prose ul, .prose ol { padding-left: 1.3em; }
+.prose li + li { margin-top: 0.3em; }
+.prose blockquote { margin-left: 0; padding: 12px 18px; border-left: 4px solid var(--ink); border-radius: 0 10px 10px 0; background: var(--wash); }
+.prose table { border-collapse: collapse; font-size: 15px; }
+.prose th, .prose td { padding: 6px 10px; border: 1px solid var(--line-strong); text-align: left; }
+
+.foot { max-width: 1080px; margin: 0 auto; padding: 24px 16px 48px; border-top: 2px solid var(--line); font-size: 14px; color: var(--ink-3); }
