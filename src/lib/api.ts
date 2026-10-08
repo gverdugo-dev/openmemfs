@@ -1,3 +1,5 @@
+import type { Color } from './colors'
+
 export type Metadata = Record<string, unknown>
 
 /** A tag a file carries because one of its folders has it. */
@@ -35,6 +37,7 @@ export interface Entry {
 export interface Tag {
   id: string
   name: string
+  color: Color
   files: number
   folders: string[]
 }
@@ -42,6 +45,7 @@ export interface Tag {
 export interface Category {
   id: string
   name: string
+  color: Color
   parent_id: string | null
   files: number
 }
@@ -113,14 +117,15 @@ export const folders = {
 
 export const tags = {
   list: () => api<Tag[]>('GET', '/tags'),
-  create: (name: string) => api<Tag>('POST', '/tags', { name }),
-  rename: (name: string, newName: string) => api<Tag>('PATCH', `/tags/${enc(name)}`, { name: newName }),
+  create: (name: string, color?: Color) => api<Tag>('POST', '/tags', { name, color }),
+  update: (name: string, change: { name?: string; color?: Color }) => api<Tag>('PATCH', `/tags/${enc(name)}`, change),
   remove: (name: string) => api<void>('DELETE', `/tags/${enc(name)}`),
 }
 
 export const categories = {
   list: () => api<Category[]>('GET', '/categories'),
-  create: (name: string, parentId?: string) => api<Category>('POST', '/categories', { name, parent_id: parentId }),
-  rename: (id: string, name: string) => api<Category>('PATCH', `/categories/${id}`, { name }),
+  create: (name: string, parentId?: string, color?: Color) =>
+    api<Category>('POST', '/categories', { name, parent_id: parentId, color }),
+  update: (id: string, change: { name?: string; color?: Color }) => api<Category>('PATCH', `/categories/${id}`, change),
   remove: (id: string) => api<void>('DELETE', `/categories/${id}`),
 }

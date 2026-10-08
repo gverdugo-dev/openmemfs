@@ -95,12 +95,12 @@ export function coreRoutes(api: Api, { files, tags, categories }: Services) {
   // Tags, named by their name
   api.get('/tags', async (c) => c.json(await tags.list()))
   api.post('/tags', async (c) => {
-    const { name } = await body<{ name?: unknown }>(c.req.raw)
-    return c.json(await tags.create(name as string), 201)
+    const { name, color } = await body<{ name?: unknown; color?: unknown }>(c.req.raw)
+    return c.json(await tags.create(name as string, color), 201)
   })
   api.patch('/tags/:name', async (c) => {
-    const { name } = await body<{ name?: unknown }>(c.req.raw)
-    return c.json(await tags.rename(c.req.param('name'), name as string))
+    const { name, color } = await body<{ name?: unknown; color?: unknown }>(c.req.raw)
+    return c.json(await tags.update(c.req.param('name'), { name, color }))
   })
   api.delete('/tags/:name', async (c) => {
     await tags.remove(c.req.param('name'))
@@ -110,12 +110,12 @@ export function coreRoutes(api: Api, { files, tags, categories }: Services) {
   // Categories and subcategories, named by their id
   api.get('/categories', async (c) => c.json(await categories.list()))
   api.post('/categories', async (c) => {
-    const { name, parent_id } = await body<{ name?: unknown; parent_id?: unknown }>(c.req.raw)
-    return c.json(await categories.create({ name: name as string, parentId: parent_id as string | null }), 201)
+    const { name, parent_id, color } = await body<{ name?: unknown; parent_id?: unknown; color?: unknown }>(c.req.raw)
+    return c.json(await categories.create({ name: name as string, parentId: parent_id as string | null, color }), 201)
   })
   api.patch('/categories/:id', async (c) => {
-    const { name } = await body<{ name?: unknown }>(c.req.raw)
-    return c.json(await categories.rename(c.req.param('id'), name as string))
+    const { name, color } = await body<{ name?: unknown; color?: unknown }>(c.req.raw)
+    return c.json(await categories.update(c.req.param('id'), { name, color }))
   })
   api.delete('/categories/:id', async (c) => {
     await categories.remove(c.req.param('id'))

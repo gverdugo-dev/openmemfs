@@ -211,6 +211,24 @@ describe.skipIf(!url)('the API', () => {
     expect((await json(await call('GET', '/categories'))).body.map((c: { name: string }) => c.name)).toEqual(['Clients'])
   })
 
+  test('tags and categories have a colour from the palette, set, kept and changed', async () => {
+    const tag = await json(await call('POST', '/tags', { name: 'Red', color: 'red' }))
+    expect(tag.body.color).toBe('red')
+    expect((await call('POST', '/tags', { name: 'Bad', color: 'teal' })).status).toBe(400)
+    const picked = await json(await call('POST', '/tags', { name: 'Picked' }))
+    expect(picked.body.color).not.toBe('gray')
+    const renamed = await json(await call('PATCH', '/tags/red', { name: 'Crimson' }))
+    expect(renamed.body).toMatchObject({ name: 'Crimson', color: 'red' })
+    expect((await json(await call('PATCH', '/tags/crimson', { color: 'blue' }))).body).toMatchObject({ name: 'Crimson', color: 'blue' })
+
+    const work = await json(await call('POST', '/categories', { name: 'Work', color: 'green' }))
+    const sub = await json(await call('POST', '/categories', { name: 'Clients', parent_id: work.body.id, color: 'yellow' }))
+    expect(sub.body.color).toBe('yellow')
+    const changed = await json(await call('PATCH', `/categories/${work.body.id}`, { color: 'purple' }))
+    expect(changed.body).toMatchObject({ name: 'Work', color: 'purple' })
+    expect((await call('PATCH', `/categories/${work.body.id}`, { color: 'nope' })).status).toBe(400)
+  })
+
   test('edit replaces a piece that appears exactly once', async () => {
     const file = await json(await call('POST', '/files', { path: '/e.md', content: 'one two two' }))
     expect((await call('POST', `/files/${file.body.id}/edit`, { old_string: 'two', new_string: '2' })).status).toBe(400)
@@ -233,14 +251,16 @@ describe.skipIf(!url)('the API', () => {
 
     const list = (await (await rpc('tools/list', {})).json()) as any
     const names = list.result.tools.map((t: { name: string }) => t.name)
-    for (const name of ['list_files', 'create_file', 'edit_file', 'tag_folder', 'create_category', 'restore_version']) {
+    for (const name of ['list_files', 'create_file', 'edit_file', 'tag_folder', 'create_category', 'update_tag', 'update_category', 'restore_version']) {
       expect(names).toContain(name)
     }
 
     const created = await callTool('create_file', { path: '/mcp/note.md', content: 'from an agent' })
     expect(created.value.path).toBe('/mcp/note.md')
     expect((await callTool('tag_file', { path: '/mcp/note.md', tag: 'ai' })).value.tags).toEqual(['ai'])
-    const cat = await callTool('create_category', { name: 'Inbox' })
+    const cat = await callTool('create_category', { name: 'Inbox', color: 'blue' })
+    expect(cat.value.color).toBe('blue')
+    expect((await callTool('update_tag', { name: 'ai', color: 'pink' })).value.color).toBe('pink')
     await callTool('set_file_category', { path: '/mcp/note.md', category_id: cat.value.id })
     const found = await callTool('list_files', { tags: ['ai'], category_id: cat.value.id, query: 'agent' })
     expect(found.value.map((e: { path: string }) => e.path)).toEqual(['/mcp/note.md'])

@@ -343,3 +343,37 @@
   color: var(--ink-4);
   pointer-events: none;
 }
+
+/*
+ * The label palette: the only colour in openmemfs, for tags, categories and subcategories.
+ * Each element carries `data-color` (one of src/lib/colors.ts) and reads three tones: a soft
+ * fill, the ink on it and a strong dot. Soft enough that the black sketchbook still leads.
+ */
+[data-color='gray'] { --tone-fill: #eeeeec; --tone-ink: #45443f; --tone-dot: #8f8e89; }
+[data-color='brown'] { --tone-fill: #f3e9e2; --tone-ink: #5f3f2c; --tone-dot: #9f6b53; }
+[data-color='orange'] { --tone-fill: #fce8d6; --tone-ink: #7d4110; --tone-dot: #e07a1f; }
+[data-color='yellow'] { --tone-fill: #fbf1cc; --tone-ink: #6b5100; --tone-dot: #d4a017; }
+[data-color='green'] { --tone-fill: #dff0e5; --tone-ink: #1f5136; --tone-dot: #3f8f5f; }
+[data-color='blue'] { --tone-fill: #dde9f7; --tone-ink: #1c4876; --tone-dot: #3a7fc1; }
+[data-color='purple'] { --tone-fill: #ece3f6; --tone-ink: #4f3475; --tone-dot: #8d62b8; }
+[data-color='pink'] { --tone-fill: #f8e1ec; --tone-ink: #722951; --tone-dot: #c9548f; }
+[data-color='red'] { --tone-fill: #fbe2de; --tone-ink: #7f2519; --tone-dot: #d5493a; }
+
+/* A chip in its label colour: soft fill, outline and ink of the same hue. */
+@utility chip-tone {
+  border-color: var(--tone-dot);
+  background: var(--tone-fill);
+  color: var(--tone-ink);
+}
+
+/* What a file gets from a folder: the same colour, dashed and lighter. */
+@utility chip-tone-muted {
+  border-style: dashed;
+  border-color: var(--tone-dot);
+  background: #fff;
+  color: var(--tone-ink);
+}
+
+@utility tone-dot {
+  background: var(--tone-dot);
+}

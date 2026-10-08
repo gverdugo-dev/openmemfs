@@ -2,10 +2,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { type FormEvent, useState } from 'react'
 import { type Category, categories, tags } from '#/lib/api'
+import type { Color } from '#/lib/colors'
 import { categoriesQuery, tagsQuery } from '#/lib/queries'
+import { ColorPicker } from './Color'
 import { Page } from './Page'
 
-/** Tags and categories in one place: create, rename and delete them. */
+/** Tags and categories in one place: create them, rename them, colour them, delete them. */
 export function Organize() {
   const queryClient = useQueryClient()
   const { data: tagList = [] } = useQuery(tagsQuery)
@@ -37,7 +39,7 @@ export function Organize() {
 
       <section className="mt-10">
         <h2 className="text-2xl">Categories</h2>
-        <p className="mt-1 text-sm text-ink-2">A file is in one category or subcategory. Deleting one leaves its files without it.</p>
+        <p className="mt-1 text-sm text-ink-2">A file is in one category or subcategory, each with its own colour. Deleting one leaves its files without it.</p>
         <AddForm label="New category" onAdd={(name) => run(() => categories.create(name))} />
         <ul className="mt-4 border-t border-line">
           {top.map((category) => (
@@ -66,16 +68,18 @@ export function Organize() {
 
       <section className="mt-12 pb-24">
         <h2 className="text-2xl">Tags</h2>
-        <p className="mt-1 text-sm text-ink-2">A file carries its own tags and the tags of its folders. Renaming a tag renames it everywhere.</p>
+        <p className="mt-1 text-sm text-ink-2">A file carries its own tags and the tags of its folders. Renaming or recolouring a tag changes it everywhere.</p>
         <AddForm label="New tag" onAdd={(name) => run(() => tags.create(name))} />
         <ul className="mt-4 border-t border-line">
           {tagList.map((tag) => (
             <li key={tag.id} className="border-b border-line">
               <EditableRow
                 name={tag.name}
+                color={tag.color}
                 detail={[`${tag.files} ${tag.files === 1 ? 'file' : 'files'}`, ...tag.folders].join(' · ')}
                 link={{ view: 'search', tag: [tag.name] }}
-                onRename={(name) => run(() => tags.rename(tag.name, name))}
+                onRename={(name) => run(() => tags.update(tag.name, { name }))}
+                onColor={(color) => run(() => tags.update(tag.name, { color }))}
                 onDelete={() =>
                   window.confirm(`Delete the tag ${tag.name}? It comes off every file and folder.`) &&
                   void run(() => tags.remove(tag.name))
@@ -95,9 +99,11 @@ function CategoryRow({ category, run }: { category: Category; run: Run }) {
   return (
     <EditableRow
       name={category.name}
+      color={category.color}
       detail={`${category.files} ${category.files === 1 ? 'file' : 'files'}`}
       link={{ view: 'search', category: category.id }}
-      onRename={(name) => run(() => categories.rename(category.id, name))}
+      onRename={(name) => run(() => categories.update(category.id, { name }))}
+      onColor={(color) => run(() => categories.update(category.id, { color }))}
       onDelete={() =>
         window.confirm(
           `Delete ${category.name}${category.parent_id ? '' : ' and its subcategories'}? Their files stay, without a category.`,
@@ -109,14 +115,16 @@ function CategoryRow({ category, run }: { category: Category; run: Run }) {
 
 interface RowProps {
   name: string
+  color: Color
   detail: string
   link: { view: 'search'; tag?: string[]; category?: string }
   onRename: (name: string) => Promise<void>
+  onColor: (color: Color) => Promise<void>
   onDelete: () => void
 }
 
-/** A name that turns into a field to rename it, how many files use it, and delete. */
-function EditableRow({ name, detail, link, onRename, onDelete }: RowProps) {
+/** A name in its colour that turns into a field to rename it, the colour picker, how many files use it, and delete. */
+function EditableRow({ name, color, detail, link, onRename, onColor, onDelete }: RowProps) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(name)
 
@@ -127,7 +135,7 @@ function EditableRow({ name, detail, link, onRename, onDelete }: RowProps) {
   }
 
   return (
-    <div className="flex items-center gap-3 py-2">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
       {editing ? (
         <form onSubmit={submit} className="flex flex-1 gap-2">
           <input
@@ -144,10 +152,11 @@ function EditableRow({ name, detail, link, onRename, onDelete }: RowProps) {
         </form>
       ) : (
         <>
-          <Link to="/" search={link} className="font-medium text-black hover:underline">
+          <Link to="/" search={link} data-color={color} className="chip chip-tone hover:underline">
             {name}
           </Link>
-          <span className="flex-1 truncate text-xs text-ink-3">{detail}</span>
+          <span className="min-w-0 flex-1 truncate text-xs text-ink-3">{detail}</span>
+          <ColorPicker label={`Colour of ${name}`} value={color} onChange={onColor} />
           <button
             type="button"
             className="btn btn-ghost h-8 px-2 text-xs"

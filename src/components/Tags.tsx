@@ -2,21 +2,23 @@ import { useQuery } from '@tanstack/react-query'
 import { type FormEvent, useId, useState } from 'react'
 import type { FolderTag } from '#/lib/api'
 import { tagsQuery } from '#/lib/queries'
+import { useTagColors } from './Color'
 
 /** Read-only tags: solid for a file's own, muted for what it gets from a folder. */
 export function TagList({ tags, inherited = [] }: { tags: string[]; inherited?: string[] }) {
+  const colorOf = useTagColors()
   if (tags.length === 0 && inherited.length === 0) return null
   return (
     <span className="flex flex-wrap gap-1">
       {tags.map((tag) => (
-        <span key={tag} className="chip">
+        <span key={tag} data-color={colorOf(tag)} className="chip chip-tone">
           {tag}
         </span>
       ))}
       {inherited
         .filter((tag) => !tags.includes(tag))
         .map((tag) => (
-          <span key={tag} className="chip chip-muted" title="From a folder">
+          <span key={tag} data-color={colorOf(tag)} className="chip chip-tone-muted" title="From a folder">
             {tag}
           </span>
         ))}
@@ -38,6 +40,7 @@ interface EditorProps {
  */
 export function TagEditor({ tags, inherited = [], onAdd, onRemove }: EditorProps) {
   const { data: all = [] } = useQuery(tagsQuery)
+  const colorOf = useTagColors()
   const [value, setValue] = useState('')
   const [error, setError] = useState('')
   const listId = useId()
@@ -63,11 +66,11 @@ export function TagEditor({ tags, inherited = [], onAdd, onRemove }: EditorProps
     <div>
       <div className="flex flex-wrap items-center gap-1">
         {tags.map((tag) => (
-          <span key={tag} className="chip">
+          <span key={tag} data-color={colorOf(tag)} className="chip chip-tone">
             {tag}
             <button
               type="button"
-              className="-mr-1 text-ink-3 hover:text-black"
+              className="-mr-1 opacity-60 hover:opacity-100"
               aria-label={`Remove tag ${tag}`}
               onClick={() => void run(() => onRemove(tag))}
             >
@@ -76,7 +79,7 @@ export function TagEditor({ tags, inherited = [], onAdd, onRemove }: EditorProps
           </span>
         ))}
         {inherited.map(({ folder, tag }) => (
-          <span key={`${folder}:${tag}`} className="chip chip-muted" title={`From ${folder}`}>
+          <span key={`${folder}:${tag}`} data-color={colorOf(tag)} className="chip chip-tone-muted" title={`From ${folder}`}>
             {tag}
           </span>
         ))}

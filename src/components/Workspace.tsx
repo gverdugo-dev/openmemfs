@@ -4,6 +4,7 @@ import { filesQuery } from '#/lib/queries'
 import type { Place } from '#/lib/place'
 import { FilePage } from './FilePage'
 import { FolderPage } from './FolderPage'
+import { Mark } from './Logo'
 import { Organize } from './Organize'
 import { Page } from './Page'
 import { Search } from './Search'
@@ -31,11 +32,12 @@ export function Workspace({ place }: { place: Place }) {
         ) : place.view === 'organize' ? (
           <Organize />
         ) : place.view === 'folder' && place.folder ? (
-          <FolderPage key={place.folder} folder={place.folder} />
+          <FolderPage key={place.folder} folder={place.folder} layout={place.layout} />
         ) : place.path ? (
           <FilePage path={place.path} tab={place.tab} tabs={tabs} />
         ) : (
           <Page>
+            <Mark className="mb-6 size-16" />
             <h1 className="text-4xl md:text-5xl">
               Your <span className="marker">memory</span>, in files.
             </h1>

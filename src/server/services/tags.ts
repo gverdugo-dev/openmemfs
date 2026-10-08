@@ -1,11 +1,12 @@
 import type { Sql, Tx } from '../db'
 import { DomainError, invalid, notFound } from '../errors'
 import { checkPath } from '../paths'
-import { checkId, checkName, isUniqueViolation } from './shared'
+import { type Color, checkColor, checkId, checkName, colorFor, isUniqueViolation } from './shared'
 
 export interface Tag {
   id: string
   name: string
+  color: Color
   /** How many files carry it on themselves. */
   files: number
   /** The folders that carry it. */
@@ -23,16 +24,18 @@ export function createTags(sql: Sql) {
   const tags = {
     async list(): Promise<Tag[]> {
       return sql<Tag[]>`
-        select t.id, t.name,
+        select t.id, t.name, t.color,
           (select count(*)::int from file_tags ft where ft.tag_id = t.id) as files,
           coalesce((select array_agg(dt.folder order by dt.folder) from folder_tags dt where dt.tag_id = t.id), '{}') as folders
         from tags t order by lower(t.name)`
     },
 
-    async create(name: string): Promise<Tag> {
+    /** Creates a tag. Without a colour it gets one from its name. */
+    async create(name: string, color?: unknown): Promise<Tag> {
       const checked = checkName(name, 'tag')
+      const paint = color === undefined || color === null ? colorFor(checked) : checkColor(color)
       const [row] = await sql<{ id: string }[]>`
-        insert into tags (name) values (${checked}) on conflict ((lower(name))) do nothing returning id`
+        insert into tags (name, color) values (${checked}, ${paint}) on conflict ((lower(name))) do nothing returning id`
       if (!row) throw new DomainError('conflict', `the tag ${checked} already exists`)
       return tags.get(checked)
     },
@@ -43,9 +46,12 @@ export function createTags(sql: Sql) {
       return found
     },
 
-    async rename(name: string, newName: string): Promise<Tag> {
-      const checked = checkName(newName, 'tag')
-      const updated = await sql`update tags set name = ${checked} where lower(name) = lower(${name.trim()}) returning id`
+    /** Renames a tag, changes its colour, or both. What is left out stays. */
+    async update(name: string, change: { name?: unknown; color?: unknown }): Promise<Tag> {
+      const current = await tags.get(name)
+      const checked = change.name === undefined || change.name === null ? current.name : checkName(change.name, 'tag')
+      const color = change.color === undefined || change.color === null ? current.color : checkColor(change.color)
+      const updated = await sql`update tags set name = ${checked}, color = ${color} where id = ${current.id} returning id`
         .catch((error) => {
           if (isUniqueViolation(error)) throw new DomainError('conflict', `the tag ${checked} already exists`)
           throw error
@@ -110,7 +116,7 @@ export function createTags(sql: Sql) {
 /** The id of the tag with this name, creating it when it does not exist. */
 async function ensure(tx: Tx, name: string): Promise<string> {
   const checked = checkName(name, 'tag')
-  await tx`insert into tags (name) values (${checked}) on conflict ((lower(name))) do nothing`
+  await tx`insert into tags (name, color) values (${checked}, ${colorFor(checked)}) on conflict ((lower(name))) do nothing`
   const [tag] = await tx<{ id: string }[]>`select id from tags where lower(name) = lower(${checked})`
   return tag!.id
 }

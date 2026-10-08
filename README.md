@@ -1,5 +1,7 @@
 # openmemfs
 
+<p><img src="docs/logo.png" alt="openmemfs" width="420"></p>
+
 A memory made of files, for you and your agents. A Notion-style editor over text files in
 Postgres, with a REST API and an MCP server your agents use to do anything you can do. Small, and
 extended by modules.

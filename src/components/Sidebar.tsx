@@ -3,6 +3,8 @@ import { type ReactNode, useMemo, useState } from 'react'
 import type { Entry } from '#/lib/api'
 import type { ModulePage } from '#/lib/module'
 import type { Place } from '#/lib/place'
+import { FileIcon, FolderIcon, SearchIcon, TagIcon } from './Icons'
+import { Logo } from './Logo'
 import { NewFile } from './NewFile'
 
 interface Folder {
@@ -44,8 +46,8 @@ export function Sidebar({ entries, place, pages }: Props) {
   return (
     <aside className="flex h-full flex-col border-r border-line bg-wash">
       <div className="flex items-center justify-between px-4 pt-4 pb-3">
-        <Link to="/" className="font-display text-lg font-extrabold tracking-tight text-black">
-          openmemfs
+        <Link to="/" aria-label="openmemfs, home">
+          <Logo className="text-lg" />
         </Link>
       </div>
       <div className="px-3 pb-3">
@@ -60,10 +62,10 @@ export function Sidebar({ entries, place, pages }: Props) {
         )}
       </div>
       <nav className="border-t border-line px-2 py-2">
-        <Row search={{ view: 'search' }} active={place.view === 'search'} depth={0}>
+        <Row search={{ view: 'search' }} active={place.view === 'search'} depth={0} icon={<SearchIcon />}>
           Search
         </Row>
-        <Row search={{ view: 'organize' }} active={place.view === 'organize'} depth={0}>
+        <Row search={{ view: 'organize' }} active={place.view === 'organize'} depth={0} icon={<TagIcon />}>
           Tags & categories
         </Row>
       </nav>
@@ -104,7 +106,7 @@ function FolderItems({ folder, depth, open, openFolder }: ItemsProps) {
       ))}
       {folder.files.map((file) => (
         <li key={file.id}>
-          <Row search={{ path: file.path }} active={open === file.path} depth={depth}>
+          <Row search={{ path: file.path }} active={open === file.path} depth={depth} icon={<FileIcon />}>
             {file.path.slice(file.path.lastIndexOf('/') + 1)}
           </Row>
         </li>
@@ -139,10 +141,12 @@ function FolderItem({ folder, depth, open, openFolder }: ItemsProps) {
         <Link
           to="/"
           search={{ view: 'folder', folder: folder.path }}
-          className="min-w-0 flex-1 truncate py-1 pr-2"
+          className="flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-2"
           aria-current={active ? 'page' : undefined}
+          title={folder.path}
         >
-          {folder.name}
+          <FolderIcon open={expanded} className="size-4 shrink-0 text-ink-2" />
+          <span className="truncate">{folder.name}</span>
         </Link>
         <button
           type="button"
@@ -164,17 +168,27 @@ function FolderItem({ folder, depth, open, openFolder }: ItemsProps) {
   )
 }
 
-function Row({ search, active, depth, children }: { search: Place; active: boolean; depth: number; children: string }) {
+interface RowProps {
+  search: Place
+  active: boolean
+  depth: number
+  icon?: ReactNode
+  children: string
+}
+
+/** A row of the explorer: a file, or one of the views at the top. */
+function Row({ search, active, depth, icon, children }: RowProps) {
   return (
     <Link
       to="/"
       search={search}
       title={children}
-      className={`block truncate rounded-md py-1 pr-2 text-sm ${active ? 'bg-pressed font-medium text-black' : 'text-ink-2 hover:bg-hover hover:text-black'}`}
-      style={{ paddingLeft: `${8 + depth * 14 + 18}px` }}
+      className={`flex items-center gap-1.5 rounded-md py-1 pr-2 text-sm ${active ? 'bg-pressed font-medium text-black' : 'text-ink-2 hover:bg-hover hover:text-black'}`}
+      style={{ paddingLeft: `${8 + depth * 14 + (depth > 0 || search.path ? 18 : 0)}px` }}
       aria-current={active ? 'page' : undefined}
     >
-      {children}
+      {icon && <span className="shrink-0 text-ink-3">{icon}</span>}
+      <span className="truncate">{children}</span>
     </Link>
   )
 }

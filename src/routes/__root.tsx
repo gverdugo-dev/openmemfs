@@ -11,11 +11,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       // A memory is private: no search engine should list it.
       { name: 'robots', content: 'noindex' },
+      { name: 'theme-color', content: '#000000' },
+      { name: 'description', content: 'A memory made of files, for you and your agents.' },
       { title: 'openmemfs' },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
       { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+      { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+      { rel: 'manifest', href: '/manifest.webmanifest' },
     ],
   }),
   shellComponent: Document,

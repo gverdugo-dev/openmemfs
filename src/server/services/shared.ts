@@ -1,4 +1,5 @@
 import { invalid, notFound } from '../errors'
+import { COLORS, type Color } from '#/lib/colors'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -18,6 +19,22 @@ export function checkName(name: unknown, what: string): string {
   if (trimmed.length > MAX_NAME_LENGTH) throw invalid(`${what} name is longer than ${MAX_NAME_LENGTH} characters`)
   if (/[\u0000-\u001f\u007f]/.test(trimmed)) throw invalid(`${what} name has control characters`)
   return trimmed
+}
+
+
+export { COLORS, type Color }
+
+/** A colour from the palette. */
+export function checkColor(color: unknown): Color {
+  if (!COLORS.includes(color as Color)) throw invalid(`color must be one of ${COLORS.join(', ')}`)
+  return color as Color
+}
+
+/** The colour a new tag or category gets when none is given: always the same for the same name. */
+export function colorFor(name: string): Color {
+  let hash = 0
+  for (const char of name.toLowerCase()) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  return COLORS[1 + (hash % (COLORS.length - 1))]!
 }
 
 /** A LIKE pattern that finds the text anywhere, with its own % and _ taken literally. */

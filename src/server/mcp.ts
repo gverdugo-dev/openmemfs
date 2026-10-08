@@ -3,6 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { z } from 'zod'
 import { DomainError } from './errors'
 import type { Services } from './services'
+import { COLORS } from './services/shared'
 
 const INSTRUCTIONS = `A memory made of text files (mostly Markdown) that a person also reads and edits in a
 Notion-style editor. Paths are absolute, like /notes/today.md; folders are not created, they
@@ -45,6 +46,8 @@ export const fileRef = {
   path: z.string().optional().describe('absolute path, like /notes/today.md'),
   id: z.string().optional().describe('the file id, instead of the path'),
 }
+
+const color = z.enum(COLORS).optional().describe('a colour for the interface; one is picked from the name when left out')
 
 const ifRevision = z.number().int().optional().describe('write only if the file is still at this revision')
 
@@ -145,10 +148,14 @@ export function coreTools(mcp: McpServer, { files, tags, categories }: Services)
     tags.untagFolder(i.folder, i.tag),
   )
 
-  tool(mcp, 'list_tags', 'List every tag, with how many files and which folders carry it.', {}, () => tags.list())
-  tool(mcp, 'create_tag', 'Create a tag.', { name: z.string() }, (i) => tags.create(i.name))
-  tool(mcp, 'rename_tag', 'Rename a tag everywhere it is used.', { name: z.string(), new_name: z.string() }, (i) =>
-    tags.rename(i.name, i.new_name),
+  tool(mcp, 'list_tags', 'List every tag, with its colour, how many files and which folders carry it.', {}, () => tags.list())
+  tool(mcp, 'create_tag', 'Create a tag, with a colour.', { name: z.string(), color }, (i) => tags.create(i.name, i.color))
+  tool(
+    mcp,
+    'update_tag',
+    'Rename a tag everywhere it is used, change its colour, or both.',
+    { name: z.string(), new_name: z.string().optional(), color },
+    (i) => tags.update(i.name, { name: i.new_name, color: i.color }),
   )
   tool(mcp, 'delete_tag', 'Delete a tag and take it off every file and folder.', { name: z.string() }, (i) =>
     tags.remove(i.name),
@@ -157,19 +164,23 @@ export function coreTools(mcp: McpServer, { files, tags, categories }: Services)
   tool(
     mcp,
     'list_categories',
-    'List the categories and subcategories (a subcategory has a parent_id), with how many files each has.',
+    'List the categories and subcategories (a subcategory has a parent_id), with their colour and how many files each has.',
     {},
     () => categories.list(),
   )
   tool(
     mcp,
     'create_category',
-    'Create a category, or a subcategory when parent_id names a category. Two levels at most.',
-    { name: z.string(), parent_id: z.string().optional() },
-    (i) => categories.create({ name: i.name, parentId: i.parent_id }),
+    'Create a category, or a subcategory when parent_id names a category. Two levels at most. Each has its own colour.',
+    { name: z.string(), parent_id: z.string().optional(), color },
+    (i) => categories.create({ name: i.name, parentId: i.parent_id, color: i.color }),
   )
-  tool(mcp, 'rename_category', 'Rename a category or subcategory.', { id: z.string(), name: z.string() }, (i) =>
-    categories.rename(i.id, i.name),
+  tool(
+    mcp,
+    'update_category',
+    'Rename a category or subcategory, change its colour, or both.',
+    { id: z.string(), name: z.string().optional(), color },
+    (i) => categories.update(i.id, { name: i.name, color: i.color }),
   )
   tool(
     mcp,

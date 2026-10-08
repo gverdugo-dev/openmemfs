@@ -1,10 +1,11 @@
 import type { Sql } from '../db'
 import { DomainError, invalid, notFound } from '../errors'
-import { checkId, checkName, isUniqueViolation } from './shared'
+import { type Color, checkColor, checkId, checkName, colorFor, isUniqueViolation } from './shared'
 
 export interface Category {
   id: string
   name: string
+  color: Color
   /** The category it belongs to, when it is a subcategory. */
   parent_id: string | null
   /** How many files are in it directly (a category does not count its subcategories' files). */
@@ -15,6 +16,8 @@ export interface CreateCategory {
   name: string
   /** Makes it a subcategory of this category. */
   parentId?: string | null
+  /** One of the palette; without it, one taken from the name. */
+  color?: unknown
 }
 
 export type Categories = ReturnType<typeof createCategories>
@@ -28,7 +31,7 @@ export function createCategories(sql: Sql) {
     /** Every category, each followed by its subcategories, by name. */
     async list(): Promise<Category[]> {
       return sql<Category[]>`
-        select c.id, c.name, c.parent_id,
+        select c.id, c.name, c.color, c.parent_id,
           (select count(*)::int from files f where f.category_id = c.id) as files
         from categories c
         left join categories p on p.id = c.parent_id
@@ -51,16 +54,18 @@ export function createCategories(sql: Sql) {
           throw invalid(`${parent.name} is a subcategory: a subcategory cannot have subcategories`)
         }
       }
+      const color = input.color === undefined || input.color === null ? colorFor(name) : checkColor(input.color)
       const [row] = await sql<{ id: string }[]>`
-        insert into categories (name, parent_id) values (${name}, ${parentId}) returning id`.catch(clash(name))
+        insert into categories (name, parent_id, color) values (${name}, ${parentId}, ${color}) returning id`.catch(clash(name))
       return categories.get(row!.id)
     },
 
-    async rename(id: string, name: string): Promise<Category> {
-      checkId(id, 'category')
-      const checked = checkName(name, 'category')
-      const updated = await sql`update categories set name = ${checked} where id = ${id} returning id`.catch(clash(checked))
-      if (updated.length === 0) throw notFound(`no category with id ${id}`)
+    /** Renames a category, changes its colour, or both. What is left out stays. */
+    async update(id: string, change: { name?: unknown; color?: unknown }): Promise<Category> {
+      const current = await categories.get(id)
+      const name = change.name === undefined || change.name === null ? current.name : checkName(change.name, 'category')
+      const color = change.color === undefined || change.color === null ? current.color : checkColor(change.color)
+      await sql`update categories set name = ${name}, color = ${color} where id = ${id}`.catch(clash(name))
       return categories.get(id)
     },
 

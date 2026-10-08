@@ -61,9 +61,12 @@ src/
     api.ts           the browser's API client (adds X-Openmemfs)
     queries.ts       the query keys and options shared by every component
     module.ts        the WebModule contract
-  lib/place.ts       the workspace's query string (?path, ?view, ?q, ?tag...) read once
-  components/        Workspace, Sidebar, FilePage, Search, FolderPage, Organize, and the pieces
-                     they share: FileList, NewFile, Tags (TagList, TagEditor), Categories
+  lib/place.ts       the workspace's query string (?path, ?view, ?layout, ?q, ?tag...) read once
+  lib/colors.ts      the label palette, shared by the server (which checks it) and the interface
+  components/        Workspace, Sidebar (the explorer), FilePage, Search, FolderPage (blocks or
+                     list), Organize, and the pieces they share: FileList, NewFile, Tags (TagList,
+                     TagEditor), Categories (CategoryBadge, CategorySelect), Color (Swatch,
+                     ColorPicker), Icons, Logo (Mark, Logo)
   modules/
     server.ts        the list of active server modules
     web.ts           the list of active web modules
@@ -108,14 +111,17 @@ at a database with data.
   is written. The editor always sends it; agents should too.
 - Limits: 1 MiB of content, 64 KiB of metadata, 1024 characters of path.
 - **`categories`**: `id`, `name`, `parent_id` (null for a category, a category for a
-  subcategory). Two levels, enforced in the service. Names are unique per level, ignoring case.
+  subcategory) and `color`. Two levels, enforced in the service. Names are unique per level, ignoring case.
   `files.category_id` points at one, `on delete set null`; deleting a category deletes its
   subcategories. Filtering by a category also finds the files of its subcategories.
-- **`tags`**: `id`, `name` (unique, ignoring case). **`file_tags`** (`file_id`, `tag_id`) and
+- **`tags`**: `id`, `name` (unique, ignoring case), `color`. **`file_tags`** (`file_id`, `tag_id`) and
   **`folder_tags`** (`folder` with its trailing slash, `tag_id`) relate them. Folders are not rows,
   so a folder tag is keyed by its path; it applies to every file under the folder when filtering
   (`folder_tags` in a file). Tagging a folder needs a file in it. Tags are addressed by name in
   the API and the tools, categories by id.
+- **Colours**: every tag, category and subcategory has one of the palette in `src/lib/colors.ts`
+  (gray, brown, orange, yellow, green, blue, purple, pink, red). Without one, a new label gets a
+  colour from its name, always the same for the same name.
 - Tags and the category are not content: changing them does not move the revision.
 - Search (`GET /api/files`, tool `list_files`): `q` in the file name, the content or both (`in`),
   ignoring case and taken literally (`%` and `_` are not wildcards); every `tag` must be on the
@@ -151,12 +157,12 @@ GET    /api/folders/tags?folder=/a/               (read_file shows folder_tags)
 POST   /api/folders/tags                          tag_folder      { folder, tag }
 DELETE /api/folders/tags?folder=&tag=             untag_folder
 GET    /api/tags                                  list_tags
-POST   /api/tags                                  create_tag      { name }
-PATCH  /api/tags/:name                            rename_tag      { name }
+POST   /api/tags                                  create_tag      { name, color? }
+PATCH  /api/tags/:name                            update_tag      { name?, color? }
 DELETE /api/tags/:name                            delete_tag
 GET    /api/categories                            list_categories
-POST   /api/categories                            create_category { name, parent_id? }
-PATCH  /api/categories/:id                        rename_category { name }
+POST   /api/categories                            create_category { name, parent_id?, color? }
+PATCH  /api/categories/:id                        update_category { name?, color? }
 DELETE /api/categories/:id                        delete_category
 GET    /api/files/:id/versions                    list_versions   (history module)
 GET    /api/files/:id/versions/:n                 read_version
@@ -224,8 +230,14 @@ marker for emphasis and the primary button, Inter 800 for headings and uppercase
 reading. The tokens live in `src/styles.css`; use them by name (`text-ink-2`, `bg-wash`,
 `border-line`, `btn btn-primary`, `field`, `marker`).
 
-- No new colours. A literal colour in a component is a defect.
-- No gradients, shadows, blur or rounded cards. Lines and white space do the work.
+- The only colour is the label palette (`[data-color]` in `src/styles.css`, read with `chip-tone`,
+  `chip-tone-muted` and `tone-dot`), and only on tags, categories and subcategories. Any other
+  literal colour in a component is a defect.
+- The brand is the mark in `src/components/Logo.tsx` (a folder with a bookmark on a black tile)
+  and the wordmark with the marker under "mem". `public/favicon.svg` is the same drawing; the PNG
+  icons in `public/` and `docs/logo.png` are rendered from it, so change them together.
+- No gradients, shadows or blur. Lines and white space do the work; a block in the folder view is
+  a 2px line, never a filled card.
 - Every view of the main area sits in `Page` (`src/components/Page.tsx`).
 - The interface is in English and has no i18n yet; copy lives in the component that shows it.
 

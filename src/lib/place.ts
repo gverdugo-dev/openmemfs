@@ -10,6 +10,8 @@ export interface Place {
   view?: 'search' | 'folder' | 'organize'
   /** The open folder, with its trailing slash, on the folder view. */
   folder?: string
+  /** How the folder view lays out its folders and files: blocks (the default) or rows. */
+  layout?: 'grid' | 'list'
   /** The search: text, where to look, tags the files must all carry, a category. */
   q?: string
   in?: 'name' | 'content' | 'all'
@@ -33,6 +35,7 @@ export function placeOf(search: Record<string, unknown>): Place {
     page: text(search.page),
     view: oneOf(search.view, ['search', 'folder', 'organize'] as const),
     folder: text(search.folder),
+    layout: oneOf(search.layout, ['grid', 'list'] as const),
     q: text(search.q),
     in: oneOf(search.in, ['name', 'content', 'all'] as const),
     tag: texts(search.tag),
