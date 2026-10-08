@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { type FormEvent, type ReactNode, useMemo, useState } from 'react'
-import { type Entry, files } from '#/lib/api'
+import { type ReactNode, useMemo, useState } from 'react'
+import type { Entry } from '#/lib/api'
 import type { ModulePage } from '#/lib/module'
 import type { Place } from '#/lib/place'
-import { filesQuery } from '#/lib/queries'
+import { NewFile } from './NewFile'
 
 interface Folder {
   name: string
@@ -66,17 +66,19 @@ export function Sidebar({ entries, place, pages }: Props) {
         </button>
         {creating && (
           <NewFile
-            folder={place.path ? place.path.slice(0, place.path.lastIndexOf('/') + 1) : '/'}
-            onDone={(path) => {
-              setCreating(false)
-              if (path) {
-                void queryClient.invalidateQueries(filesQuery)
-                void navigate({ to: '/', search: { path } })
-              }
-            }}
+            folder={place.folder ?? (place.path ? place.path.slice(0, place.path.lastIndexOf('/') + 1) : '/')}
+            onClose={() => setCreating(false)}
           />
         )}
       </div>
+      <nav className="border-t border-line px-2 py-2">
+        <Row search={{ view: 'search' }} active={place.view === 'search'} depth={0}>
+          Search
+        </Row>
+        <Row search={{ view: 'organize' }} active={place.view === 'organize'} depth={0}>
+          Tags & categories
+        </Row>
+      </nav>
       {pages.length > 0 && (
         <nav className="border-t border-line px-2 py-2">
           {pages.map((page) => (
@@ -90,18 +92,27 @@ export function Sidebar({ entries, place, pages }: Props) {
         {entries.length === 0 ? (
           <p className="px-2 py-1 text-sm text-ink-3">No files yet.</p>
         ) : (
-          <FolderItems folder={tree} depth={0} open={place.path} />
+          <FolderItems folder={tree} depth={0} open={place.path} openFolder={place.view === 'folder' ? place.folder : undefined} />
         )}
       </nav>
     </aside>
   )
 }
 
-function FolderItems({ folder, depth, open }: { folder: Folder; depth: number; open?: string }) {
+interface ItemsProps {
+  folder: Folder
+  depth: number
+  /** The open file. */
+  open?: string
+  /** The open folder page. */
+  openFolder?: string
+}
+
+function FolderItems({ folder, depth, open, openFolder }: ItemsProps) {
   return (
     <ul>
       {folder.folders.map((child) => (
-        <FolderItem key={child.path} folder={child} depth={depth} open={open} />
+        <FolderItem key={child.path} folder={child} depth={depth} open={open} openFolder={openFolder} />
       ))}
       {folder.files.map((file) => (
         <li key={file.id}>
@@ -114,21 +125,35 @@ function FolderItems({ folder, depth, open }: { folder: Folder; depth: number; o
   )
 }
 
-function FolderItem({ folder, depth, open }: { folder: Folder; depth: number; open?: string }) {
-  const [expanded, setExpanded] = useState(() => !open || open.startsWith(folder.path))
+/** A folder: the chevron opens and closes it, the name opens its page (tags, files). */
+function FolderItem({ folder, depth, open, openFolder }: ItemsProps) {
+  const [expanded, setExpanded] = useState(() => (!open && !openFolder) || !!(open ?? openFolder)?.startsWith(folder.path))
+  const active = openFolder === folder.path
   return (
     <li>
-      <button
-        type="button"
-        className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-sm font-medium text-black hover:bg-hover"
-        style={{ paddingLeft: `${8 + depth * 14}px` }}
-        aria-expanded={expanded}
-        onClick={() => setExpanded(!expanded)}
+      <div
+        className={`flex items-center rounded-md text-sm font-medium text-black ${active ? 'bg-pressed' : 'hover:bg-hover'}`}
+        style={{ paddingLeft: `${4 + depth * 14}px` }}
       >
-        <Chevron open={expanded} />
-        <span className="truncate">{folder.name}</span>
-      </button>
-      {expanded && <FolderItems folder={folder} depth={depth + 1} open={open} />}
+        <button
+          type="button"
+          className="rounded p-1"
+          aria-expanded={expanded}
+          aria-label={`${expanded ? 'Close' : 'Open'} ${folder.name}`}
+          onClick={() => setExpanded(!expanded)}
+        >
+          <Chevron open={expanded} />
+        </button>
+        <Link
+          to="/"
+          search={{ view: 'folder', folder: folder.path }}
+          className="min-w-0 flex-1 truncate py-1 pr-2"
+          aria-current={active ? 'page' : undefined}
+        >
+          {folder.name}
+        </Link>
+      </div>
+      {expanded && <FolderItems folder={folder} depth={depth + 1} open={open} openFolder={openFolder} />}
     </li>
   )
 }
@@ -145,48 +170,6 @@ function Row({ search, active, depth, children }: { search: Place; active: boole
     >
       {children}
     </Link>
-  )
-}
-
-/** Asks for the path of the new file, starting in the folder that is open. */
-function NewFile({ folder, onDone }: { folder: string; onDone: (path?: string) => void }) {
-  const [path, setPath] = useState(`${folder}untitled.md`)
-  const [error, setError] = useState('')
-
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    try {
-      const file = await files.create(path.trim())
-      onDone(file.path)
-    } catch (e) {
-      setError((e as Error).message)
-    }
-  }
-
-  return (
-    <form onSubmit={submit} className="mt-2 rounded-lg border-2 border-black bg-white p-2">
-      <label className="block text-xs font-medium text-ink-2" htmlFor="new-path">
-        Path
-      </label>
-      <input
-        id="new-path"
-        className="field mt-1 py-1 font-mono text-sm"
-        value={path}
-        autoFocus
-        onFocus={(e) => e.target.setSelectionRange(folder.length, path.lastIndexOf('.') > folder.length ? path.lastIndexOf('.') : path.length)}
-        onChange={(e) => setPath(e.target.value)}
-        onKeyDown={(e) => e.key === 'Escape' && onDone()}
-      />
-      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
-      <div className="mt-2 flex justify-end gap-1">
-        <button type="button" className="btn btn-ghost h-8 px-2" onClick={() => onDone()}>
-          Cancel
-        </button>
-        <button type="submit" className="btn btn-primary h-8 px-3">
-          Create
-        </button>
-      </div>
-    </form>
   )
 }
 

@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { getServer } from '#/server/instance'
 
-/** /api/*: the core routes and the modules' routes, all in the Hono app of src/server/app.ts. */
-export const Route = createFileRoute('/api/$')({
+/** /mcp: the MCP endpoint for agents, in the Hono app of src/server/app.ts. Needs the Bearer token. */
+export const Route = createFileRoute('/mcp')({
   server: {
     handlers: {
       ANY: async ({ request }) => (await getServer()).app.fetch(request),

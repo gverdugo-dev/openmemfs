@@ -9,7 +9,7 @@ import { migrate } from './migrate'
  * applies pending migrations (unless MIGRATE_ON_START=false) and builds the API. A failure
  * is not cached, so the next request tries again (a database that was still starting, say).
  */
-let instance: Promise<{ api: ReturnType<typeof createApp>; auth: ReturnType<typeof createAuth> }> | undefined
+let instance: Promise<{ app: ReturnType<typeof createApp>; auth: ReturnType<typeof createAuth> }> | undefined
 
 export function getServer() {
   instance ??= start().catch((error) => {
@@ -26,5 +26,5 @@ async function start() {
     const applied = await migrate(sql)
     if (applied.length) console.log(`applied ${applied.join(', ')}`)
   }
-  return { api: createApp(sql, config), auth: createAuth(config.token) }
+  return { app: createApp(sql, config), auth: createAuth(config.token) }
 }

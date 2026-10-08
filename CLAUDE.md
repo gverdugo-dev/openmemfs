@@ -6,18 +6,27 @@ here exists so that two agents working on openmemfs end up writing it the same w
 ## What it is
 
 **openmemfs**: a memory made of files, for a person and their agents. A Notion-style editor over
-text files kept in Postgres, with three tabs on every file (Content, Metadata, History) and a REST
-API that agents write through. It is small on purpose and grows by **modules**. Anyone deploys it
-anywhere: one container, one Postgres, one token.
+text files kept in Postgres, with three tabs on every file (Content, Metadata, History), tags on
+files and folders, categories and subcategories, and search by name and content. Agents reach the
+same memory through a REST API and an MCP endpoint. It is small on purpose and grows by
+**modules**. Anyone deploys it anywhere: one container, one Postgres, one token.
 
 ```
-   browser (React)        TanStack Start (Nitro, Bun)          Postgres
-   ┌────────────────┐     ┌──────────────────────────┐     ┌──────────────────┐
-   │ editor, tabs,  │ ──► │ /api/$: Hono, files +    │ ──► │ files            │
-   │ module pages   │ ◄── │ modules; pages, sign-in  │ ◄── │ file_versions    │
-   └────────────────┘     └──────────────────────────┘     │ <module tables>  │
-   agents ── Authorization: Bearer <token> ──► /api         └──────────────────┘
+   browser (React) ──/api──┐                                       Postgres
+                           ▼                                       ┌──────────────────┐
+   agents ── REST ──► /api: Hono routes ──┐                        │ files            │
+   agents ── MCP ───► /mcp: MCP tools  ───┼──► services ─────────► │ tags, file_tags, │
+                                          │    (files, tags,       │ folder_tags      │
+                      modules add routes, ┘     categories)        │ categories       │
+                      tools and hooks                              │ <module tables>  │
+                                                                   └──────────────────┘
 ```
+
+**Two doors, one layer.** Every rule lives in a service (`src/server/services/`). The REST door
+(`src/server/api.ts`) and the MCP door (`src/server/mcp.ts`) only read the request, call one
+service and return its answer. **Anything a person can do in the interface, an agent can do
+through both doors**: a new operation is a service method plus its route plus its tool, in the same
+change. A rule written in a route or a tool is a defect.
 
 ## Stack
 
@@ -38,20 +47,25 @@ src/
   start.ts           request middleware: security headers
   routes/
     __root.tsx       the document: head, noindex, 404
-    index.tsx        the workspace (?path, ?tab, ?page); redirects to /sign-in without a session
+    index.tsx        the workspace (see lib/place.ts); redirects to /sign-in without a session
     sign-in.tsx      the token form
-    api/$.ts         every /api request, handed to the Hono app
-  server/            the core: config, db, auth, the file service, the app, migrations
+    api/$.ts         every /api request, handed to the app
+    mcp.ts           /mcp, handed to the same app
+  server/            the core: config, db, auth, services, the two doors, migrations
     instance.ts      getServer(): config, db, migrations and the app, once per process
-    files.ts         the only code that writes the `files` table
+    services/        files.ts (the only code that writes `files`), tags.ts, categories.ts, shared.ts
+    api.ts           the REST door: one route per service operation
+    mcp.ts           the MCP door: one tool per service operation, and `tool()` for modules
     module.ts        the ServerModule contract
-    app.ts           the /api routes and module wiring
+    app.ts           auth, both doors and module wiring
   lib/
     api.ts           the browser's API client (adds X-Openmemfs)
     queries.ts       the query keys and options shared by every component
     session.ts       isSignedIn, a server function the routes use in beforeLoad
     module.ts        the WebModule contract
-  components/        Workspace, Sidebar, FilePage, Page, SignIn
+  lib/place.ts       the workspace's query string (?path, ?view, ?q, ?tag...) read once
+  components/        Workspace, Sidebar, FilePage, Search, FolderPage, Organize, and the pieces
+                     they share: FileList, NewFile, Tags (TagList, TagEditor), Categories
   modules/
     server.ts        the list of active server modules
     web.ts           the list of active web modules
@@ -95,12 +109,28 @@ at a database with data.
 - Every write can carry `if_revision`. If the file moved on, the answer is 409 `stale` and nothing
   is written. The editor always sends it; agents should too.
 - Limits: 1 MiB of content, 64 KiB of metadata, 1024 characters of path.
+- **`categories`**: `id`, `name`, `parent_id` (null for a category, a category for a
+  subcategory). Two levels, enforced in the service. Names are unique per level, ignoring case.
+  `files.category_id` points at one, `on delete set null`; deleting a category deletes its
+  subcategories. Filtering by a category also finds the files of its subcategories.
+- **`tags`**: `id`, `name` (unique, ignoring case). **`file_tags`** (`file_id`, `tag_id`) and
+  **`folder_tags`** (`folder` with its trailing slash, `tag_id`) relate them. Folders are not rows,
+  so a folder tag is keyed by its path; it applies to every file under the folder when filtering
+  (`folder_tags` in a file). Tagging a folder needs a file in it. Tags are addressed by name in
+  the API and the tools, categories by id.
+- Tags and the category are not content: changing them does not move the revision.
+- Search (`GET /api/files`, tool `list_files`): `q` in the file name, the content or both (`in`),
+  ignoring case and taken literally (`%` and `_` are not wildcards); every `tag` must be on the
+  file or on a folder above it; `category`; `prefix` for a folder. A content hit carries a
+  `snippet`.
 
 ## Auth
 
 One token, `OPENMEMFS_TOKEN`. There are no users.
 
 - Agents send `Authorization: Bearer <token>` and their writes are by `agent`.
+- `/mcp` takes only the Bearer token. Without it the answer is **403, not 401**: a 401 makes MCP
+  clients start OAuth discovery and show its 404 instead of the real problem.
 - People type the token on the sign-in page, which sets an HttpOnly, SameSite=Strict cookie. Their
   writes are by `user`.
 - A request authenticated by the cookie must carry `X-Openmemfs: 1` to write. Other sites cannot
@@ -108,19 +138,39 @@ One token, `OPENMEMFS_TOKEN`. There are no users.
 - Open without a token: `GET /api/health`, `POST /api/session`, `DELETE /api/session`, the
   sign-in page and the assets. Every other page redirects to `/sign-in` in `beforeLoad`. Everything else under `/api` is closed. A new route is closed by default; keep it so.
 
-## The API
+## The API and the MCP tools
 
 ```
-GET    /api/files?prefix=/notes/          list (no content)
-GET    /api/files/by-path?path=/a.md       one file
-GET    /api/files/:id                      one file
-POST   /api/files                          { path, content?, metadata? }
-PATCH  /api/files/:id                      { path?, content?, metadata?, if_revision?, checkpoint? }
-DELETE /api/files/:id
-GET    /api/files/:id/versions             history module
-GET    /api/files/:id/versions/:n
-POST   /api/files/:id/versions/:n/restore  { if_revision? }
+GET    /api/files?prefix&q&in&tag&tag&category   list_files      (no content; snippet on hits)
+GET    /api/files/by-path?path=/a.md              read_file
+GET    /api/files/:id                             read_file
+POST   /api/files                                 create_file     { path, content?, metadata? }
+PATCH  /api/files/:id                             update_file     { path?, content?, metadata?, if_revision?, checkpoint? }
+POST   /api/files/:id/edit                        edit_file       { old_string, new_string, if_revision? }
+DELETE /api/files/:id                             delete_file
+PUT    /api/files/:id/category                    set_file_category  { category_id | null }
+POST   /api/files/:id/tags                        tag_file        { tag }
+DELETE /api/files/:id/tags/:tag                   untag_file
+GET    /api/folders/tags?folder=/a/               (read_file shows folder_tags)
+POST   /api/folders/tags                          tag_folder      { folder, tag }
+DELETE /api/folders/tags?folder=&tag=             untag_folder
+GET    /api/tags                                  list_tags
+POST   /api/tags                                  create_tag      { name }
+PATCH  /api/tags/:name                            rename_tag      { name }
+DELETE /api/tags/:name                            delete_tag
+GET    /api/categories                            list_categories
+POST   /api/categories                            create_category { name, parent_id? }
+PATCH  /api/categories/:id                        rename_category { name }
+DELETE /api/categories/:id                        delete_category
+GET    /api/files/:id/versions                    list_versions   (history module)
+GET    /api/files/:id/versions/:n                 read_version
+POST   /api/files/:id/versions/:n/restore         restore_version { if_revision? }
 ```
+
+The tools take a file by `path` (what agents usually know) or `id`. MCP is Streamable HTTP
+without sessions at `/mcp`: every request builds its server, so any instance answers. Tool errors
+carry the same message as the API's; anything that is not a domain error is `internal error` and
+goes to the log.
 
 Errors are `{ "error": "...", "code": "invalid|not_found|conflict|stale|unauthorized" }` with the
 matching status. The message is written to be read by the caller, often a model.
@@ -135,9 +185,12 @@ the ones it needs.
    - `migrations`: `'src/modules/<id>/migrations'` if it has tables (relative to the project root,
      because the built server runs from `.output/`).
    - `setup(ctx)` returns `routes(api)` to add routes under `/api` (already authenticated; prefix
-     them with the module id or hang them under `/files/:id/<id>`) and `afterWrite(tx, file, write)`
-     to react to every file write inside its transaction.
-   - It reads and writes files through `ctx.files`, never with its own SQL on `files`. Its own
+     them with the module id or hang them under `/files/:id/<id>`), `tools(mcp)` to add MCP tools
+     with `tool()` from `#/server/mcp`, and `afterWrite(tx, file, write)` to react to every file
+     write inside its transaction.
+   - Put its operations in one object (its service) and call it from both its routes and its
+     tools, as `src/modules/history/server.ts` does. Every route has a tool twin.
+   - It reads and writes files through `ctx.services.files`, never with its own SQL on `files`. Its own
      tables are its own.
    - Throw `invalid()` / `notFound()` from `#/server/errors`; never build an error response by hand.
    - Register it in `src/modules/server.ts`.
@@ -153,7 +206,7 @@ the ones it needs.
 3. **Migrations**, `src/modules/<id>/migrations/NNNN_name.sql`. Name tables after the module
    (`<id>_...`), and reference `files(id)` with `on delete cascade` when rows belong to a file.
 
-Then add tests for its routes next to `src/server/app.test.ts` and run `bun run check`.
+Then add tests for its routes and tools next to `src/server/app.test.ts` and run `bun run check`.
 
 ## Migrations
 

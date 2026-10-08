@@ -1,12 +1,13 @@
 # openmemfs
 
 A memory made of files, for you and your agents. A Notion-style editor over text files in
-Postgres, with a REST API your agents write through. Small, and extended by modules.
+Postgres, with a REST API and an MCP server your agents use to do anything you can do. Small, and
+extended by modules.
 
 | | |
 |---|---|
 | **What it is** | A self-hosted file memory: an editor for people, an API for agents |
-| **Status** | v0.1: editor, metadata, version history, modules |
+| **Status** | v0.1: editor, metadata, version history, tags, categories, search, REST and MCP, modules |
 | **Stack** | TanStack Start, React, TanStack Query, Hono, Postgres, TipTap, Tailwind, Bun |
 | **License** | MIT |
 
@@ -19,6 +20,10 @@ Postgres, with a REST API your agents write through. Small, and extended by modu
 - **History**: every change leaves a version, with who made it (you or an agent). Saves close
   together fold into one version. Any version can be restored, and the restore is a version too.
 - **Rename and move**: edit the name at the top of the page; a name starting with `/` moves the file.
+- **Tags**: on a file or on a folder (every file below carries a folder's tags when you filter).
+- **Categories and subcategories**: one per file, managed on the Tags & categories page.
+- **Search**: by file name, by content or both, filtered by tags (all of them), by category (with
+  its subcategories) and by folder. Every search has a link.
 - **Conflicts**: if an agent changes a file you have open, nothing is overwritten; you choose.
 - **Modules**: new tabs, pages, routes and tables live in `src/modules/`, each in its own folder.
 
@@ -52,16 +57,27 @@ curl -X POST http://localhost:8080/api/files \
   -d '{"path": "/notes/today.md", "content": "# Today\n\n- ship it", "metadata": {"status": "draft"}}'
 ```
 
-The whole API, the auth model and how to write a module are in [CLAUDE.md](CLAUDE.md).
+Or connect an MCP client. With Claude Code:
+
+```bash
+claude mcp add --transport http openmemfs http://localhost:8080/mcp \
+  --header "Authorization: Bearer $OPENMEMFS_TOKEN"
+```
+
+The agent gets a tool for everything the interface does: list and search files, read, create,
+edit, move and delete them, tag files and folders, manage tags and categories, and read or restore
+versions.
+
+The whole API, the tools, the auth model and how to write a module are in [CLAUDE.md](CLAUDE.md).
 
 ## Structure
 
 ```
 src/routes/   the pages (sign-in, the workspace) and /api
-src/server/   the core: files, auth, migrations, the HTTP API
+src/server/   the core: services, auth, migrations, the REST and MCP doors
 src/modules/  content, metadata, history, and yours
 src/components/ the editor shell
-migrations/   the core tables
+migrations/   the core tables: files, categories, tags
 ```
 
 ## License

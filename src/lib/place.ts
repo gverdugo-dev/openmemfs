@@ -6,4 +6,36 @@ export interface Place {
   tab?: string
   /** A module page, instead of a file. */
   page?: string
+  /** A view of the core instead of a file: search, the folder page, tags and categories. */
+  view?: 'search' | 'folder' | 'organize'
+  /** The open folder, with its trailing slash, on the folder view. */
+  folder?: string
+  /** The search: text, where to look, tags the files must all carry, a category. */
+  q?: string
+  in?: 'name' | 'content' | 'all'
+  tag?: string[]
+  category?: string
+}
+
+const text = (value: unknown) => (typeof value === 'string' && value ? value : undefined)
+const oneOf = <T extends string>(value: unknown, options: readonly T[]) =>
+  options.includes(value as T) ? (value as T) : undefined
+const texts = (value: unknown) => {
+  const list = (Array.isArray(value) ? value : [value]).filter((v): v is string => typeof v === 'string' && v !== '')
+  return list.length ? list : undefined
+}
+
+/** Reads a place from the query string, dropping anything it does not know. */
+export function placeOf(search: Record<string, unknown>): Place {
+  return {
+    path: text(search.path),
+    tab: text(search.tab),
+    page: text(search.page),
+    view: oneOf(search.view, ['search', 'folder', 'organize'] as const),
+    folder: text(search.folder),
+    q: text(search.q),
+    in: oneOf(search.in, ['name', 'content', 'all'] as const),
+    tag: texts(search.tag),
+    category: text(search.category),
+  }
 }

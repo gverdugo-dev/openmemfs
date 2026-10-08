@@ -43,8 +43,23 @@ export function createAuth(token: string) {
     return c.json({ error: 'sign in, or send Authorization: Bearer <token>' }, 401)
   }
 
+  /**
+   * The MCP endpoint: only the Bearer token. A missing or wrong one is a 403, not a 401: on a
+   * 401 MCP clients start an OAuth discovery this server does not offer, and the person sees
+   * that failure instead of the real one.
+   */
+  const requireAgent: MiddlewareHandler<AppEnv> = async (c, next) => {
+    const header = c.req.header('Authorization')
+    if (!header?.startsWith('Bearer ') || !same(sha256(header.slice(7)), tokenHash)) {
+      return c.json({ error: 'send Authorization: Bearer <OPENMEMFS_TOKEN>' }, 403)
+    }
+    c.set('author', 'agent')
+    return next()
+  }
+
   return {
     require,
+    requireAgent,
     /** Whether a session cookie value opens this memory. The pages ask before they render. */
     isSession,
     /** Checks a typed token and opens a session. */

@@ -5,13 +5,16 @@ import { webModules } from '#/modules/web'
 import { filesQuery } from '#/lib/queries'
 import type { Place } from '#/lib/place'
 import { FilePage } from './FilePage'
+import { FolderPage } from './FolderPage'
+import { Organize } from './Organize'
 import { Page } from './Page'
+import { Search } from './Search'
 import { Sidebar } from './Sidebar'
 
 const tabs = webModules.flatMap((m) => m.tabs ?? [])
 const pages = webModules.flatMap((m) => m.pages ?? [])
 
-/** The sidebar on the left and, on the right, a module page, a file, or the home. */
+/** The sidebar on the left and, on the right, a module page, search, tags and categories, a folder, a file, or the home. */
 export function Workspace({ place }: { place: Place }) {
   const navigate = useNavigate()
   const { data: entries = [] } = useQuery(filesQuery)
@@ -33,6 +36,12 @@ export function Workspace({ place }: { place: Place }) {
       <main className="min-h-0 overflow-y-auto">
         {page ? (
           <page.Component />
+        ) : place.view === 'search' ? (
+          <Search place={place} />
+        ) : place.view === 'organize' ? (
+          <Organize />
+        ) : place.view === 'folder' && place.folder ? (
+          <FolderPage key={place.folder} folder={place.folder} />
         ) : place.path ? (
           <FilePage path={place.path} tab={place.tab} tabs={tabs} />
         ) : (

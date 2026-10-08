@@ -24,7 +24,7 @@ describe.skipIf(!url)('the API', () => {
   })
   afterAll(() => sql.end())
   beforeEach(async () => {
-    await sql`truncate files cascade`
+    await sql`truncate files, tags, categories cascade`
     app = createApp(sql, config(300))
   })
 
@@ -151,6 +151,122 @@ describe.skipIf(!url)('the API', () => {
 
   test('unknown API routes are 404 and do not fall through to the editor', async () => {
     expect((await call('GET', '/nope')).status).toBe(404)
+  })
+
+  test('searches by name and by content, and filters by folder', async () => {
+    await call('POST', '/files', { path: '/notes/plan.md', content: 'Ship the 50% beta on Friday' })
+    await call('POST', '/files', { path: '/notes/beta.md', content: 'nothing here' })
+    await call('POST', '/files', { path: '/work/plan.md', content: 'BETA again' })
+    const paths = async (query: string) =>
+      (await json(await call('GET', `/files?${query}`))).body.map((e: { path: string }) => e.path)
+
+    expect(await paths('q=beta')).toEqual(['/notes/beta.md', '/notes/plan.md', '/work/plan.md'])
+    expect(await paths('q=beta&in=name')).toEqual(['/notes/beta.md'])
+    expect(await paths('q=beta&in=content')).toEqual(['/notes/plan.md', '/work/plan.md'])
+    expect(await paths('q=50%25')).toEqual(['/notes/plan.md'])
+    expect(await paths('q=5_%25')).toEqual([])
+    expect(await paths('q=plan&prefix=/work/')).toEqual(['/work/plan.md'])
+    const [hit] = (await json(await call('GET', '/files?q=friday&in=content'))).body
+    expect(hit.snippet).toContain('on Friday')
+    expect((await call('GET', '/files?in=everywhere')).status).toBe(400)
+  })
+
+  test('tags relate to files and folders, and folder tags reach the files under them', async () => {
+    const a = await json(await call('POST', '/files', { path: '/clients/acme/brief.md' }))
+    const b = await json(await call('POST', '/files', { path: '/clients/acme/notes.md' }))
+    await call('POST', '/files', { path: '/personal/todo.md' })
+
+    const tagged = await json(await call('POST', `/files/${a.body.id}/tags`, { tag: 'Urgent' }))
+    expect(tagged.body.tags).toEqual(['Urgent'])
+    expect(tagged.body.revision).toBe(1)
+    await call('POST', `/files/${a.body.id}/tags`, { tag: 'urgent' })
+    expect((await json(await call('GET', '/tags'))).body).toMatchObject([{ name: 'Urgent', files: 1 }])
+
+    expect((await json(await call('POST', '/folders/tags', { folder: '/clients/', tag: 'work' }))).body).toEqual(['work'])
+    expect((await call('POST', '/folders/tags', { folder: '/nowhere/', tag: 'work' })).status).toBe(404)
+    expect((await call('POST', '/folders/tags', { folder: '/', tag: 'work' })).status).toBe(400)
+    const inherited = await json(await call('GET', `/files/${b.body.id}`))
+    expect(inherited.body.folder_tags).toEqual([{ folder: '/clients/', tag: 'work' }])
+
+    const paths = async (query: string) =>
+      (await json(await call('GET', `/files?${query}`))).body.map((e: { path: string }) => e.path)
+    expect(await paths('tag=work')).toEqual(['/clients/acme/brief.md', '/clients/acme/notes.md'])
+    expect(await paths('tag=work&tag=URGENT')).toEqual(['/clients/acme/brief.md'])
+    expect(await paths('tag=missing')).toEqual([])
+
+    await call('PATCH', '/tags/urgent', { name: 'Now' })
+    expect((await json(await call('GET', `/files/${a.body.id}`))).body.tags).toEqual(['Now'])
+    expect((await call('POST', '/tags', { name: 'now' })).status).toBe(409)
+    await call('DELETE', `/files/${a.body.id}/tags/now`)
+    expect((await json(await call('GET', `/files/${a.body.id}`))).body.tags).toEqual([])
+    expect((await call('DELETE', '/tags/work')).status).toBe(204)
+    expect(await paths('tag=work')).toEqual([])
+  })
+
+  test('categories have subcategories, and a category filter finds both', async () => {
+    const work = await json(await call('POST', '/categories', { name: 'Work' }))
+    const clients = await json(await call('POST', '/categories', { name: 'Clients', parent_id: work.body.id }))
+    expect(clients.body.parent_id).toBe(work.body.id)
+    expect((await call('POST', '/categories', { name: 'Deep', parent_id: clients.body.id })).status).toBe(400)
+    expect((await call('POST', '/categories', { name: 'work' })).status).toBe(409)
+    expect((await call('POST', '/categories', { name: 'Clients' })).status).toBe(201)
+
+    const f1 = await json(await call('POST', '/files', { path: '/a.md' }))
+    const f2 = await json(await call('POST', '/files', { path: '/b.md' }))
+    await call('POST', '/files', { path: '/c.md' })
+    const put = await json(await call('PUT', `/files/${f1.body.id}/category`, { category_id: work.body.id }))
+    expect(put.body).toMatchObject({ category_id: work.body.id, revision: 1 })
+    await call('PUT', `/files/${f2.body.id}/category`, { category_id: clients.body.id })
+
+    const paths = async (id: string) =>
+      (await json(await call('GET', `/files?category=${id}`))).body.map((e: { path: string }) => e.path)
+    expect(await paths(work.body.id)).toEqual(['/a.md', '/b.md'])
+    expect(await paths(clients.body.id)).toEqual(['/b.md'])
+
+    await call('DELETE', `/categories/${work.body.id}`)
+    expect((await json(await call('GET', `/files/${f2.body.id}`))).body.category_id).toBeNull()
+    expect((await json(await call('GET', '/categories'))).body.map((c: { name: string }) => c.name)).toEqual(['Clients'])
+  })
+
+  test('edit replaces a piece that appears exactly once', async () => {
+    const file = await json(await call('POST', '/files', { path: '/e.md', content: 'one two two' }))
+    expect((await call('POST', `/files/${file.body.id}/edit`, { old_string: 'two', new_string: '2' })).status).toBe(400)
+    const edited = await json(await call('POST', `/files/${file.body.id}/edit`, { old_string: 'one', new_string: '1' }))
+    expect(edited.body).toMatchObject({ content: '1 two two', revision: 2 })
+  })
+
+  test('MCP tools reach the same services, and need the Bearer token', async () => {
+    const rpc = (method: string, params: unknown, auth = `Bearer ${TOKEN}`) =>
+      app.request('http://localhost/mcp', {
+        method: 'POST',
+        headers: { Authorization: auth, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      })
+    const callTool = async (name: string, args: unknown) => {
+      const { result } = (await (await rpc('tools/call', { name, arguments: args })).json()) as any
+      const text: string = result.content[0].text
+      return { error: result.isError === true, value: result.isError ? text : JSON.parse(text) }
+    }
+
+    expect((await rpc('tools/list', {}, 'Bearer wrong')).status).toBe(403)
+    expect((await rpc('tools/list', {}, '')).status).toBe(403)
+    const list = (await (await rpc('tools/list', {})).json()) as any
+    const names = list.result.tools.map((t: { name: string }) => t.name)
+    for (const name of ['list_files', 'create_file', 'edit_file', 'tag_folder', 'create_category', 'restore_version']) {
+      expect(names).toContain(name)
+    }
+
+    const created = await callTool('create_file', { path: '/mcp/note.md', content: 'from an agent' })
+    expect(created.value.path).toBe('/mcp/note.md')
+    expect((await callTool('tag_file', { path: '/mcp/note.md', tag: 'ai' })).value.tags).toEqual(['ai'])
+    const cat = await callTool('create_category', { name: 'Inbox' })
+    await callTool('set_file_category', { path: '/mcp/note.md', category_id: cat.value.id })
+    const found = await callTool('list_files', { tags: ['ai'], category_id: cat.value.id, query: 'agent' })
+    expect(found.value.map((e: { path: string }) => e.path)).toEqual(['/mcp/note.md'])
+    expect((await callTool('read_file', { path: '/nope.md' })).error).toBe(true)
+
+    const versions = await callTool('list_versions', { path: '/mcp/note.md' })
+    expect(versions.value).toMatchObject([{ version: 1, author: 'agent' }])
   })
 
   async function signIn(): Promise<string> {

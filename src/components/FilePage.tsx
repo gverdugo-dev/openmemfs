@@ -4,7 +4,9 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { ApiError, type FileData, files } from '#/lib/api'
 import type { FileTab, WritePatch } from '#/lib/module'
 import { fileQuery, filesQuery } from '#/lib/queries'
+import { CategorySelect } from './Categories'
 import { Page } from './Page'
+import { TagEditor } from './Tags'
 
 type Saving = 'saved' | 'saving' | 'conflict' | 'error'
 
@@ -110,6 +112,27 @@ export function FilePage({ path, tab, tabs }: Props) {
     }
   }
 
+  /**
+   * Category and tags are not content: they do not move the revision. They still wait in the
+   * write queue, so their answer never puts an older revision on screen over a newer one.
+   */
+  function organize(action: (id: string) => Promise<FileData>) {
+    const run = async () => {
+      try {
+        show(await action(file!.id), false)
+        void Promise.all(
+          [['files'], ['tags'], ['categories']].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+        )
+      } catch (e) {
+        setSaving('error')
+        setMessage((e as Error).message)
+      }
+    }
+    const next = queue.current.then(run)
+    queue.current = next
+    return next
+  }
+
   async function remove() {
     if (!window.confirm(`Delete ${file!.path}? Its history goes with it.`)) return
     await files.remove(file!.id)
@@ -130,6 +153,28 @@ export function FilePage({ path, tab, tabs }: Props) {
       </div>
 
       <FileName key={file.path} name={name} onRename={rename} />
+
+      <dl className="mt-4 grid grid-cols-[6rem_1fr] items-center gap-x-4 gap-y-2 text-sm">
+        <dt className="text-ink-3">Category</dt>
+        <dd>
+          <CategorySelect
+            label="Category"
+            empty="None"
+            className="h-9 w-auto max-w-full py-0 text-sm"
+            value={file.category_id}
+            onChange={(id) => void organize((fileId) => files.setCategory(fileId, id))}
+          />
+        </dd>
+        <dt className="text-ink-3">Tags</dt>
+        <dd>
+          <TagEditor
+            tags={file.tags}
+            inherited={file.folder_tags}
+            onAdd={(tag) => organize((id) => files.tag(id, tag))}
+            onRemove={(tag) => organize((id) => files.untag(id, tag))}
+          />
+        </dd>
+      </dl>
 
       {(saving === 'conflict' || saving === 'error') && (
         <div className="mt-4 rounded-lg border-2 border-black bg-wash px-4 py-3 text-sm">

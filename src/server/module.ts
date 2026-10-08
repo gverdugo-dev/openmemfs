@@ -1,7 +1,8 @@
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { Hono } from 'hono'
 import type { Config } from './config'
 import type { Sql } from './db'
-import type { Author, Files, WriteHook } from './files'
+import type { Author, Services, WriteHook } from './services'
 
 /** What every request handler can read: who is writing. */
 export type AppEnv = { Variables: { author: Author } }
@@ -11,8 +12,8 @@ export type Api = Hono<AppEnv>
 
 export interface ModuleContext {
   sql: Sql
-  /** The file service. A module writes files through it, never with its own SQL on `files`. */
-  files: Files
+  /** The service layer. A module writes files through it, never with its own SQL on `files`. */
+  services: Services
   config: Config
 }
 
@@ -21,6 +22,11 @@ export interface ModuleParts {
   afterWrite?: WriteHook
   /** Adds routes under /api. Prefix them with the module id or hang them under /files/:id/<module>. */
   routes?: (api: Api) => void
+  /**
+   * Adds MCP tools, registered with `tool()` from `#/server/mcp`. Whatever a module lets a
+   * person do through its routes, it lets an agent do through a tool.
+   */
+  tools?: (mcp: McpServer) => void
 }
 
 /**
