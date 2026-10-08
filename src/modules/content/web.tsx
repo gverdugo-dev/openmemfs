@@ -7,6 +7,7 @@ import { joinFrontmatter, type Property, readProperties, splitFrontmatter, type 
 
 const AUTOSAVE_MS = 700
 const MODE_KEY = 'content-mode'
+const SOFT_BREAKS = 'openmemfs-soft-breaks'
 
 type Mode = 'visual' | 'markdown'
 
@@ -109,7 +110,22 @@ function Visual({ initial, onChange, onEditProperties }: { initial: string; onCh
     contentType: 'markdown',
     immediatelyRender: true,
     editorProps: { attributes: { class: 'prose-openmemfs min-h-[50vh]', 'aria-label': 'Content' } },
-    onUpdate: ({ editor }) => onChange(joinFrontmatter({ frontmatter: split.frontmatter, body: editor.getMarkdown() })),
+    // A line break inside a paragraph is a soft break in Markdown, read as a space; ProseMirror
+    // would draw it as a new line. It is joined on screen only, and saved only after an edit.
+    onCreate: ({ editor }) => {
+      const tr = editor.state.tr
+      editor.state.doc.descendants((node, pos, parent) => {
+        if (node.isText && node.text?.includes('\n') && !parent?.type.spec.code) {
+          const text = editor.schema.text(node.text.replace(/[ \t]*\n[ \t]*/g, ' '), node.marks)
+          tr.replaceWith(tr.mapping.map(pos), tr.mapping.map(pos + node.nodeSize), text)
+        }
+      })
+      if (tr.docChanged) editor.view.dispatch(tr.setMeta('addToHistory', false).setMeta(SOFT_BREAKS, true))
+    },
+    onUpdate: ({ editor, transaction }) => {
+      if (transaction.getMeta(SOFT_BREAKS)) return
+      onChange(joinFrontmatter({ frontmatter: split.frontmatter, body: editor.getMarkdown() }))
+    },
   })
   return (
     <>

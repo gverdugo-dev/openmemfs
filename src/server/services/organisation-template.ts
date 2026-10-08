@@ -31,7 +31,7 @@ A starting layout. Change it to fit your life and your work.
         people/           colleagues and partners
         clients/<client>/ everything about one client
         projects/<project>/
-/references/              outside material mirrored or summarised here, for other files to cite
+/references/              outside material kept here to cite
 \`\`\`
 
 Rules for the tree:
