@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import { categories, type Filters, files, folders, tags } from './api'
+import { categories, type Filters, files, folders, tags, trash } from './api'
 
 /** Every file, without content: the sidebar tree. */
 export const filesQuery = queryOptions({ queryKey: ['files'], queryFn: () => files.list() })
@@ -29,3 +29,6 @@ export const categoriesQuery = queryOptions({ queryKey: ['categories'], queryFn:
 
 export const folderTagsQuery = (folder: string) =>
   queryOptions({ queryKey: ['folder-tags', folder], queryFn: () => folders.tags(folder) })
+
+/** The trash. Under ['files'], so deleting or restoring a file refreshes it. */
+export const trashQuery = queryOptions({ queryKey: ['files', 'trash'], queryFn: trash.list })

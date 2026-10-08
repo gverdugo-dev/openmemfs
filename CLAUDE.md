@@ -131,6 +131,10 @@ at a database with data.
   is always there; `files` refuses to move or delete it. `GET /api/organisation` and the tool
   `get_organisation` return it with the server's `now`, and the MCP instructions tell agents to
   call it first.
+- **The trash**: deleting a file sets `files.deleted_at`; the row keeps its history, tags and
+  category until the trash is emptied, and gives up its path (only live paths are unique). Every
+  query on `files` outside the trash says `deleted_at is null`; a new one must too. Restoring is a
+  write, back to its path or to a new one when that is taken.
 - A name cannot be a file and a folder at once (`/a` and `/a/b` is a 409 `conflict`).
 - **Metadata** is where an agent writes for itself: state, summaries, links, anything it wants to
   find again without parsing the content. The core does not read it; modules may (`when`).
@@ -177,7 +181,11 @@ GET    /api/files/:id                             read_file
 POST   /api/files                                 create_file     { path, content?, metadata? }
 PATCH  /api/files/:id                             update_file     { path?, content?, metadata?, if_revision?, checkpoint? }
 POST   /api/files/:id/edit                        edit_file       { old_string, new_string, if_revision? }
-DELETE /api/files/:id                             delete_file
+DELETE /api/files/:id                             delete_file     (to the trash)
+GET    /api/trash                                 list_trash
+POST   /api/trash/:id/restore                     restore_file    { path? }
+DELETE /api/trash/:id                             empty_trash     { id }
+DELETE /api/trash                                 empty_trash
 PUT    /api/files/:id/category                    set_file_category  { category_id | null }
 POST   /api/files/:id/tags                        tag_file        { tag }
 DELETE /api/files/:id/tags/:tag                   untag_file

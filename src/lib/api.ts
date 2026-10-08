@@ -109,6 +109,21 @@ export const files = {
   untag: (id: string, tag: string) => api<FileData>('DELETE', `/files/${id}/tags/${enc(tag)}`),
 }
 
+/** A file in the trash. */
+export interface Trashed {
+  id: string
+  path: string
+  size: number
+  deleted_at: string
+}
+
+export const trash = {
+  list: () => api<Trashed[]>('GET', '/trash'),
+  restore: (id: string, path?: string) => api<FileData>('POST', `/trash/${id}/restore`, path ? { path } : {}),
+  remove: (id: string) => api<{ deleted: number }>('DELETE', `/trash/${id}`),
+  empty: () => api<{ deleted: number }>('DELETE', '/trash'),
+}
+
 export const folders = {
   list: () => api<string[]>('GET', '/folders'),
   create: (path: string) => api<{ path: string }>('POST', '/folders', { path }),

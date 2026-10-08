@@ -136,13 +136,13 @@ export function FilePage({ path, tab, tabs }: Props) {
   }
 
   async function remove() {
-    if (!window.confirm(`Delete ${file!.path}? Its history goes with it.`)) return
     try {
       await files.remove(file!.id)
     } catch (e) {
       return notify((e as Error).message)
     }
     void queryClient.invalidateQueries(filesQuery)
+    notify(`${file!.path} moved to the trash.`)
     void navigate({ to: '/', search: {} })
   }
 

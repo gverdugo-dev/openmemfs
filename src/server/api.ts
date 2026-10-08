@@ -70,6 +70,15 @@ export function coreRoutes(api: Api, { files, folders, tags, categories, organis
     return c.body(null, 204)
   })
 
+  // The trash: deleted files wait here, with their history, until it is emptied.
+  api.get('/trash', async (c) => c.json(await files.trash()))
+  api.post('/trash/:id/restore', async (c) => {
+    const { path } = await body<{ path?: unknown }>(c.req.raw)
+    return c.json(await files.restore(c.req.param('id'), { path }, { author: c.get('author') }))
+  })
+  api.delete('/trash/:id', async (c) => c.json(await files.emptyTrash(c.req.param('id'))))
+  api.delete('/trash', async (c) => c.json(await files.emptyTrash()))
+
   // A file's category and tags. They are not content: they do not change the revision.
   api.put('/files/:id/category', async (c) => {
     const { category_id } = await body<{ category_id?: unknown }>(c.req.raw)

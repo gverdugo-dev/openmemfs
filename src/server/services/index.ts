@@ -23,7 +23,7 @@ export function createServices(sql: Sql, afterWrite: WriteHook[] = [], tables: T
   }
 }
 
-export type { Author, Entry, File, Metadata, Search, Write, WriteHook } from './files'
+export type { Author, Entry, File, Metadata, Search, Trashed, Write, WriteHook } from './files'
 export type { Category } from './categories'
 export type { Organisation } from './organisation'
 export type { Tag } from './tags'

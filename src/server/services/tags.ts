@@ -25,7 +25,8 @@ export function createTags(sql: Sql, tb: Tables = tablesOf(sql)) {
     async list(): Promise<Tag[]> {
       return sql<Tag[]>`
         select t.id, t.name, t.color,
-          (select count(*)::int from ${tb.file_tags} ft where ft.tag_id = t.id) as files,
+          (select count(*)::int from ${tb.file_tags} ft join ${tb.files} f on f.id = ft.file_id
+            where ft.tag_id = t.id and f.deleted_at is null) as files,
           coalesce((select array_agg(dt.folder order by dt.folder) from ${tb.folder_tags} dt where dt.tag_id = t.id), '{}') as folders
         from ${tb.tags} t order by lower(t.name)`
     },
@@ -70,7 +71,7 @@ export function createTags(sql: Sql, tb: Tables = tablesOf(sql)) {
       checkId(fileId, 'file')
       await sql.begin(async (tx) => {
         const tagId = await ensure(tb, tx, name)
-        const [file] = await tx`select 1 from ${tb.files} where id = ${fileId}`
+        const [file] = await tx`select 1 from ${tb.files} where id = ${fileId} and deleted_at is null`
         if (!file) throw notFound(`no file with id ${fileId}`)
         await tx`insert into ${tb.file_tags} (file_id, tag_id) values (${fileId}, ${tagId}) on conflict do nothing`
       })
@@ -95,7 +96,7 @@ export function createTags(sql: Sql, tb: Tables = tablesOf(sql)) {
       const checked = checkFolder(folder)
       await sql.begin(async (tx) => {
         const [inside] = await tx`
-          select 1 from ${tb.files} where starts_with(path, ${checked})
+          select 1 from ${tb.files} where deleted_at is null and starts_with(path, ${checked})
           union all select 1 from ${tb.folders} where starts_with(path, ${checked}) limit 1`
         if (!inside) throw notFound(`no folder ${checked}`)
         const tagId = await ensure(tb, tx, name)

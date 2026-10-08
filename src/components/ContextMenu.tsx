@@ -114,7 +114,6 @@ function useActions(item: Dragged): Action[][] {
 
   async function remove() {
     if (item.kind === 'file') {
-      if (!window.confirm(`Delete ${item.path}? Its history goes with it.`)) return
       try {
         await files.remove(item.id)
       } catch (e) {
@@ -132,7 +131,7 @@ function useActions(item: Dragged): Action[][] {
       await refresh()
       if (place.folder?.startsWith(item.path)) void navigate({ to: '/', search: { view: 'folder', folder: parentOf(item) } })
     }
-    notify(`${nameOf(item)} deleted.`)
+    notify(item.kind === 'file' ? `${nameOf(item)} moved to the trash.` : `${nameOf(item)} deleted.`)
   }
 
   async function duplicate() {

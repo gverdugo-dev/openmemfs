@@ -46,13 +46,13 @@ export function tool<Shape extends z.ZodRawShape>(
 }
 
 /**
- * What a client may assume about a tool, read from its name: `list_`, `read_` and `get_`
- * only read; `delete_` and `untag_` remove something; the rest write without removing.
- * A module tool that breaks the naming gets the cautious default (writes, may remove).
+ * What a client may assume about a tool, read from its name: `list_`, `read_` and `get_` only
+ * read; `create_`, `tag_`, `commit_` and `restore_` only add; anything else may change or
+ * remove what is there. A module tool named otherwise gets that cautious default.
  */
 function annotationsOf(name: string) {
   if (/^(list|read|get)_/.test(name)) return { readOnlyHint: true, openWorldHint: false }
-  const removes = !/^(create|tag|commit)_/.test(name)
+  const removes = !/^(create|tag|commit|restore)_/.test(name)
   return { readOnlyHint: false, destructiveHint: removes, openWorldHint: false }
 }
 
@@ -139,9 +139,24 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
       return files.edit(file.id, { oldString: i.old_string, newString: i.new_string, ifRevision: i.if_revision }, agent)
     },
   )
-  tool(mcp, 'delete_file', 'Delete a file, with its history and its tags.', fileRef, async (i) => {
+  tool(mcp, 'delete_file', 'Move a file to the trash. It keeps its history and tags, and restore_file brings it back.', fileRef, async (i) => {
     await files.remove((await files.find(i)).id)
   })
+  tool(mcp, 'list_trash', 'List the files in the trash, most recently deleted first, with their ids.', {}, () => files.trash())
+  tool(
+    mcp,
+    'restore_file',
+    'Take a file out of the trash, by its id from list_trash, back to its path or to a new one when that path is taken.',
+    { id: z.string(), path: z.string().optional().describe('restore it here instead of its old path') },
+    (i) => files.restore(i.id, { path: i.path }, agent),
+  )
+  tool(
+    mcp,
+    'empty_trash',
+    'Delete for good one file of the trash (by id), or the whole trash. It cannot be undone: only when the person asks.',
+    { id: z.string().optional().describe('only this file of the trash') },
+    (i) => files.emptyTrash(i.id),
+  )
 
   tool(mcp, 'list_folders', 'List every folder, empty ones included, like /notes/.', {}, () => folders.list())
   tool(

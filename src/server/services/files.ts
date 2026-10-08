@@ -47,6 +47,14 @@ export interface Entry {
   snippet?: string
 }
 
+/** A file in the trash. */
+export interface Trashed {
+  id: string
+  path: string
+  size: number
+  deleted_at: Date
+}
+
 /** What to look for. Every field narrows the list; leave them all out to list everything. */
 export interface Search {
   /** Only files under this folder ("/notes/"). */
@@ -139,7 +147,7 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
           end as snippet
         from ${tb.files} f
         left join ${tb.categories} c on c.id = f.category_id
-        where starts_with(f.path, ${prefix})
+        where f.deleted_at is null and starts_with(f.path, ${prefix})
           and (${query}::text is null
             or (${byName} and regexp_replace(f.path, '^.*/', '') ilike ${pattern})
             or (${byContent} and f.content ilike ${pattern}))
@@ -161,7 +169,7 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
     },
 
     async getByPath(path: string): Promise<File> {
-      const [row] = await sql<{ id: string }[]>`select id from ${tb.files} where path = ${checkPath(path)}`
+      const [row] = await sql<{ id: string }[]>`select id from ${tb.files} where path = ${checkPath(path)} and deleted_at is null`
       if (!row) throw notFound(`no file ${path}`)
       return one(tb, sql, row.id)
     },
@@ -183,7 +191,7 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
         const [row] = await tx<{ id: string }[]>`
           insert into ${tb.files} (path, content, metadata)
           values (${path}, ${content}, ${tx.json(metadata as never)})
-          on conflict (path) do nothing
+          on conflict (path) where deleted_at is null do nothing
           returning id`
         if (!row) throw new DomainError('conflict', `${path} already exists`)
         const file = await one(tb, tx, row.id)
@@ -253,18 +261,19 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
         .begin(async (tx) => {
           await lockStructure(tx)
           const [source] = await tx`
-            select 1 from ${tb.files} where starts_with(path, ${from})
+            select 1 from ${tb.files} where deleted_at is null and starts_with(path, ${from})
             union all select 1 from ${tb.folders} where starts_with(path, ${from}) limit 1`
           if (!source) throw notFound(`no folder ${from}`)
           const [taken] = await tx<{ path: string }[]>`
-            select path from ${tb.files} where starts_with(path, ${to}) or ${to} = path || '/' or starts_with(${to}, path || '/')
+            select path from ${tb.files}
+            where deleted_at is null and (starts_with(path, ${to}) or ${to} = path || '/' or starts_with(${to}, path || '/'))
             union all select path from ${tb.folders} where starts_with(path, ${to}) limit 1`
           if (taken) throw new DomainError('conflict', `${to} is taken: ${taken.path} is already there`)
           // Tags left behind by a folder that used to be at the destination would collide.
           await dropOrphanFolderTags(tb, tx)
           const moved = await tx<{ id: string; path: string }[]>`
             update ${tb.files} set path = ${to} || substr(path, ${from.length + 1}), revision = revision + 1, updated_at = now()
-            where starts_with(path, ${from}) returning id, path`
+            where deleted_at is null and starts_with(path, ${from}) returning id, path`
           for (const file of moved) checkPath(file.path)
           await tx`update ${tb.folders} set path = ${to} || substr(path, ${from.length + 1}) where starts_with(path, ${from})`
           await tx`update ${tb.folder_tags} set folder = ${to} || substr(folder, ${from.length + 1}) where starts_with(folder, ${from})`
@@ -285,20 +294,71 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
         const [found] = await sql`select 1 from ${tb.categories} where id = ${categoryId}`
         if (!found) throw notFound(`no category with id ${categoryId}`)
       }
-      const updated = await sql`update ${tb.files} set category_id = ${categoryId} where id = ${id} returning id`
+      const updated = await sql`update ${tb.files} set category_id = ${categoryId} where id = ${id} and deleted_at is null returning id`
       if (updated.length === 0) throw notFound(`no file with id ${id}`)
       return one(tb, sql, id)
     },
 
+    /** Moves a file to the trash. It keeps its history, tags and category until the trash is emptied. */
     async remove(id: string): Promise<void> {
       checkId(id, 'file')
       await sql.begin(async (tx) => {
-        const [current] = await tx<{ path: string }[]>`select path from ${tb.files} where id = ${id} for update`
+        const [current] = await tx<{ path: string }[]>`
+          select path from ${tb.files} where id = ${id} and deleted_at is null for update`
         if (!current) throw notFound(`no file with id ${id}`)
         if (current.path === ORGANISATION_PATH) throw invalid(`${ORGANISATION_PATH} cannot be deleted: edit it instead`)
-        await tx`delete from ${tb.files} where id = ${id}`
+        await tx`update ${tb.files} set deleted_at = now() where id = ${id}`
         await dropOrphanFolderTags(tb, tx)
       })
+    },
+
+    /** The files in the trash, most recently deleted first. */
+    async trash(): Promise<Trashed[]> {
+      return sql<Trashed[]>`
+        select id, path, octet_length(content) as size, deleted_at from ${tb.files}
+        where deleted_at is not null order by deleted_at desc, path collate "C"`
+    },
+
+    /**
+     * Takes a file out of the trash, back to its path or to `path` when given. Restoring is a
+     * write: the revision goes up and the history sees it.
+     */
+    async restore(id: string, input: { path?: unknown }, write: Write): Promise<File> {
+      checkId(id, 'file')
+      const path = input.path === undefined || input.path === null ? undefined : checkPath(input.path)
+      return sql
+        .begin(async (tx) => {
+          const [trashed] = await tx<{ path: string }[]>`
+            select path from ${tb.files} where id = ${id} and deleted_at is not null for update`
+          if (!trashed) throw notFound(`no file with id ${id} in the trash`)
+          const target = path ?? trashed.path
+          await lockStructure(tx)
+          const [taken] = await tx`select 1 from ${tb.files} where path = ${target} and deleted_at is null`
+          if (taken) throw new DomainError('conflict', `${target} already exists: restore it under another path`)
+          await checkNoClash(tb, tx, target, id)
+          await tx`
+            update ${tb.files} set path = ${target}, deleted_at = null, revision = revision + 1, updated_at = now()
+            where id = ${id}`
+          const file = await one(tb, tx, id)
+          await runHooks(tx, file, write)
+          return file
+        })
+        .catch((error) => {
+          if (isUniqueViolation(error)) throw new DomainError('conflict', `${path} already exists`)
+          throw error
+        })
+    },
+
+    /** Deletes for good one file of the trash, or the whole trash. Returns how many went. */
+    async emptyTrash(id?: string): Promise<{ deleted: number }> {
+      if (id !== undefined) {
+        checkId(id, 'file')
+        const gone = await sql`delete from ${tb.files} where id = ${id} and deleted_at is not null returning id`
+        if (gone.length === 0) throw notFound(`no file with id ${id} in the trash`)
+        return { deleted: 1 }
+      }
+      const gone = await sql`delete from ${tb.files} where deleted_at is not null returning id`
+      return { deleted: gone.length }
     },
   }
   return files
@@ -321,7 +381,7 @@ async function one(tb: Tables, sql: Sql | Tx, id: string): Promise<File> {
         from ${tb.folder_tags} dt join ${tb.tags} t on t.id = dt.tag_id
         where starts_with(f.path, dt.folder)
       ), '[]') as folder_tags
-    from ${tb.files} f where f.id = ${id}`
+    from ${tb.files} f where f.id = ${id} and f.deleted_at is null`
   if (!file) throw notFound(`no file with id ${id}`)
   return file
 }
@@ -329,7 +389,7 @@ async function one(tb: Tables, sql: Sql | Tx, id: string): Promise<File> {
 /** Locks the row for a write and checks the revision the caller read. */
 async function lock(tb: Tables, tx: Tx, id: string, ifRevision: number | undefined) {
   const [current] = await tx<Pick<File, 'path' | 'content' | 'metadata' | 'revision'>[]>`
-    select path, content, metadata, revision from ${tb.files} where id = ${id} for update`
+    select path, content, metadata, revision from ${tb.files} where id = ${id} and deleted_at is null for update`
   if (!current) throw notFound(`no file with id ${id}`)
   if (ifRevision !== undefined && current.revision !== ifRevision) throw staleError(current, ifRevision)
   return current
@@ -349,7 +409,7 @@ function staleError(current: { path: string; revision: number }, ifRevision: num
 async function checkNoClash(tb: Tables, tx: Tx, path: string, ownId: string | null) {
   const [clash] = await tx<{ path: string }[]>`
     select path from ${tb.files}
-    where (${ownId}::uuid is null or id <> ${ownId}::uuid)
+    where deleted_at is null and (${ownId}::uuid is null or id <> ${ownId}::uuid)
       and (starts_with(path, ${path + '/'}) or starts_with(${path}, path || '/'))
     union all
     select path from ${tb.folders} where starts_with(path, ${path + '/'})

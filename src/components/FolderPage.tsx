@@ -56,7 +56,7 @@ export function FolderPage({ folder, layout = 'grid' }: { folder: string; layout
   const navigate = useNavigate()
   const [creating, setCreating] = useState<'file' | 'folder' | null>(null)
   const [error, setError] = useState('')
-  const { data: tags = [] } = useQuery(folderTagsQuery(folder))
+  const { data: tags = [] } = useQuery({ ...folderTagsQuery(folder), enabled: folder !== '/' })
   const { data: entries } = useQuery(searchQuery({ prefix: folder }))
   const { data: folderPaths = [] } = useQuery(foldersQuery)
   const contents = useMemo(() => contentsOf(folder, entries ?? [], folderPaths), [folder, entries, folderPaths])

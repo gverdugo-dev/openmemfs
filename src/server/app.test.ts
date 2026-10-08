@@ -410,4 +410,30 @@ describe.skipIf(!url)('the API', () => {
       await sql`drop schema if exists om_schema_test cascade`
     }
   })
+
+  test('deleting moves a file to the trash, with its history, until the trash is emptied', async () => {
+    const file = (await json(await call('POST', '/files', { path: '/t/a.md', content: 'one' }))).body
+    await call('POST', `/files/${file.id}/tags`, { tag: 'keep' })
+    await call('POST', `/files/${file.id}/commit`, { message: 'first' })
+    expect((await call('DELETE', `/files/${file.id}`)).status).toBe(204)
+    expect((await call('GET', '/files/by-path?path=/t/a.md')).status).toBe(404)
+    expect((await json(await call('GET', '/files'))).body.some((e: { path: string }) => e.path === '/t/a.md')).toBe(false)
+
+    const trash = await json(await call('GET', '/trash'))
+    expect(trash.body).toMatchObject([{ id: file.id, path: '/t/a.md' }])
+
+    // Its path is free again; restoring there is a conflict, restoring elsewhere is not.
+    const other = (await json(await call('POST', '/files', { path: '/t/a.md', content: 'two' }))).body
+    expect((await json(await call('POST', `/trash/${file.id}/restore`, {}))).status).toBe(409)
+    const back = await json(await call('POST', `/trash/${file.id}/restore`, { path: '/t/b.md' }))
+    expect(back.body).toMatchObject({ path: '/t/b.md', content: 'one', tags: ['keep'] })
+    const versions = (await json(await call('GET', `/files/${file.id}/versions`))).body
+    expect(versions.some((v: { message: string | null }) => v.message === 'first')).toBe(true)
+
+    await call('DELETE', `/files/${other.id}`)
+    await call('DELETE', `/files/${back.body.id}`)
+    expect((await json(await call('DELETE', `/trash/${other.id}`))).body).toEqual({ deleted: 1 })
+    expect((await json(await call('DELETE', '/trash'))).body).toEqual({ deleted: 1 })
+    expect((await json(await call('GET', '/trash'))).body).toEqual([])
+  })
 })

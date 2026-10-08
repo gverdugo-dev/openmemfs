@@ -32,7 +32,7 @@ export function createCategories(sql: Sql, tb: Tables = tablesOf(sql)) {
     async list(): Promise<Category[]> {
       return sql<Category[]>`
         select c.id, c.name, c.color, c.parent_id,
-          (select count(*)::int from ${tb.files} f where f.category_id = c.id) as files
+          (select count(*)::int from ${tb.files} f where f.category_id = c.id and f.deleted_at is null) as files
         from ${tb.categories} c
         left join ${tb.categories} p on p.id = c.parent_id
         order by lower(coalesce(p.name, c.name)), c.parent_id is not null, lower(c.name)`

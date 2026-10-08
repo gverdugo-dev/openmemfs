@@ -66,6 +66,6 @@ export async function lockStructure(tx: Tx): Promise<void> {
 export async function dropOrphanFolderTags(tb: Tables, tx: Tx): Promise<void> {
   await tx`
     delete from ${tb.folder_tags} dt
-    where not exists (select 1 from ${tb.files} where starts_with(path, dt.folder))
+    where not exists (select 1 from ${tb.files} where starts_with(path, dt.folder) and deleted_at is null)
       and not exists (select 1 from ${tb.folders} where starts_with(path, dt.folder))`
 }

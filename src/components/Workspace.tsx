@@ -10,6 +10,7 @@ import { MoveNotice } from './Move'
 import { Organize } from './Organize'
 import { Search } from './Search'
 import { PanelIcon } from './Icons'
+import { Trash } from './Trash'
 import { Sidebar } from './Sidebar'
 import { SidebarResizer, useSidebarLayout } from './SidebarLayout'
 
@@ -55,6 +56,8 @@ export function Workspace({ place }: { place: Place }) {
           <Guides slug={place.guide} />
         ) : place.view === 'organize' ? (
           <Organize />
+        ) : place.view === 'trash' ? (
+          <Trash />
         ) : place.path ? (
           <FilePage path={place.path} tab={place.tab} tabs={tabs} />
         ) : (

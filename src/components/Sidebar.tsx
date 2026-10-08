@@ -4,7 +4,7 @@ import type { Entry } from '#/lib/api'
 import type { ModulePage } from '#/lib/module'
 import type { Place } from '#/lib/place'
 import { contextMenuProps, renameKeyProps } from './ContextMenu'
-import { BookIcon, FileIcon, FolderIcon, PanelIcon, SearchIcon, TagIcon } from './Icons'
+import { BookIcon, FileIcon, FolderIcon, PanelIcon, SearchIcon, TagIcon, TrashIcon } from './Icons'
 import { Logo } from './Logo'
 import { type Dragged, dragProps, useDropTarget } from './Move'
 import { NewFile, NewFolder } from './NewFile'
@@ -101,6 +101,9 @@ export function Sidebar({ entries, folders, place, pages, onCollapse }: Props) {
         </Row>
         <Row search={{ view: 'organize' }} active={place.view === 'organize'} depth={0} icon={<TagIcon />}>
           Tags & categories
+        </Row>
+        <Row search={{ view: 'trash' }} active={place.view === 'trash'} depth={0} icon={<TrashIcon />}>
+          Trash
         </Row>
       </nav>
       {pages.length > 0 && (
