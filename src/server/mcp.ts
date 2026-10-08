@@ -5,7 +5,11 @@ import { DomainError } from './errors'
 import type { Services } from './services'
 import { COLORS } from './services/shared'
 
-const INSTRUCTIONS = `A memory made of text files (mostly Markdown) that a person also reads and edits in a
+const INSTRUCTIONS = `Call get_organisation before anything else: it returns /organisation.md, the owner's
+rules for this memory (where things go, how files are named and labelled in the Open Knowledge
+Format), and the current time. Those rules win over your habits.
+
+A memory made of text files (mostly Markdown) that a person also reads and edits in a
 Notion-style editor. Paths are absolute, like /notes/today.md; a folder exists while some file is in
 it, or because it was created empty (create_folder). Look before writing: list_files to find what exists, then
 read_file. Prefer edit_file over rewriting a whole file. Pass if_revision (from read_file) when
@@ -52,9 +56,16 @@ const color = z.enum(COLORS).optional().describe('a colour for the interface; on
 const ifRevision = z.number().int().optional().describe('write only if the file is still at this revision')
 
 /** The core tools: the twin of every route in `api.ts`. Agents always write as `agent`. */
-export function coreTools(mcp: McpServer, { files, folders, tags, categories }: Services) {
+export function coreTools(mcp: McpServer, { files, folders, tags, categories, organisation }: Services) {
   const agent = { author: 'agent' as const }
 
+  tool(
+    mcp,
+    'get_organisation',
+    "Call this first. Returns /organisation.md, the owner's rules for this memory (folders, names, Open Knowledge Format labels, how to work), and the current time to use in timestamps. Edit the file with edit_file to change the rules.",
+    {},
+    () => organisation.get(),
+  )
   tool(
     mcp,
     'list_files',

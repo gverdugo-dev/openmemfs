@@ -30,4 +30,4 @@ versions. Ask it "what do you know about my project X?" and it will search here.
 
 Programs use the same operations through the REST API at `/api`.
 
-Next: [Give your agent an organisation](03-organisation.md).
+Next: [Your organisation file](03-organisation.md).

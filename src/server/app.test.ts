@@ -325,5 +325,29 @@ describe.skipIf(!url)('the API', () => {
     expect(versions.value).toMatchObject([{ version: 1, author: 'agent' }])
     const commit = await callTool('commit_file', { path: '/mcp/note.md', message: 'From the agent' })
     expect(commit.value).toMatchObject({ version: 1, message: 'From the agent' })
+
+    const rules = await callTool('get_organisation', {})
+    expect(rules.value).toMatchObject({ path: '/organisation.md', seeded: true })
+  })
+
+  test('/organisation.md is written from the template once, and cannot be moved or deleted', async () => {
+    const first = await json(await call('GET', '/organisation'))
+    expect(first.status).toBe(200)
+    expect(first.body.seeded).toBe(true)
+    expect(first.body.content).toContain('Open Knowledge Format')
+    expect(first.body.content).not.toContain('{{now}}')
+    expect(Date.parse(first.body.now)).not.toBeNaN()
+
+    const file = (await json(await call('GET', '/files/by-path?path=/organisation.md'))).body
+    await call('POST', `/files/${file.id}/edit`, { old_string: '**The owner is `human:owner`.**', new_string: '**The owner is `human:me`.**' })
+    const second = await json(await call('GET', '/organisation'))
+    expect(second.body.seeded).toBe(false)
+    expect(second.body.content).toContain('human:me')
+
+    const moved = await json(await call('PATCH', `/files/${file.id}`, { path: '/rules.md' }))
+    expect(moved).toMatchObject({ status: 400, body: { code: 'invalid' } })
+    const deleted = await json(await call('DELETE', `/files/${file.id}`))
+    expect(deleted).toMatchObject({ status: 400, body: { code: 'invalid' } })
+    expect((await call('GET', '/files/by-path?path=/organisation.md')).status).toBe(200)
   })
 })

@@ -120,6 +120,12 @@ at a database with data.
   **`folders`** (`path` with its trailing slash) holds only those. Deleting a folder works only
   when it has no files, and removes its empty subfolders and its tags. A file cannot take the
   name of a created folder.
+- **`/organisation.md`** is the owner's rules for the memory (folders, names, Open Knowledge
+  Format labels, how to work). The organisation service (`services/organisation.ts`) writes it
+  from `organisation-template.ts` the first time anyone asks, and the server asks on start, so it
+  is always there; `files` refuses to move or delete it. `GET /api/organisation` and the tool
+  `get_organisation` return it with the server's `now`, and the MCP instructions tell agents to
+  call it first.
 - A name cannot be a file and a folder at once (`/a` and `/a/b` is a 409 `conflict`).
 - **Metadata** is where an agent writes for itself: state, summaries, links, anything it wants to
   find again without parsing the content. The core does not read it; modules may (`when`).
@@ -159,6 +165,7 @@ it belongs in a module or in the deployment.
 ## The API and the MCP tools
 
 ```
+GET    /api/organisation                          get_organisation (written from the template if missing)
 GET    /api/files?prefix&q&in&tag&tag&category   list_files      (no content; snippet on hits)
 GET    /api/files/by-path?path=/a.md              read_file
 GET    /api/files/:id                             read_file

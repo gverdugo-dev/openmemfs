@@ -1,70 +1,40 @@
-# Give your agent an organisation
+# Your organisation file
 
 An agent that connects to openmemfs sees tools, not intentions. It does not know where you keep
-your projects, how you name files or what it may change. Tell it once, in the memory itself.
+your projects, how you name files or what it may change. openmemfs tells it, from the memory
+itself.
 
-## 1. Write `/organisation.md`
+## `/organisation.md` is always there
 
-Create a file at the root of your memory called `organisation.md`. Keep it short:
+The first time openmemfs starts, it writes `/organisation.md` at the root. It holds your rules
+for the memory: the folders, how files are named, how they are labelled and how an agent should
+work. It cannot be moved or deleted; you edit it like any other file, and its history shows how
+your rules changed.
 
-```markdown
-# How this memory is organised
+It starts from a template you make your own:
 
-This is openmemfs, my personal memory. Read it before answering about me or my work.
+- **The owner.** Replace `human:owner` with your id, once.
+- **The folders.** A starting layout (`/inbox/`, `/personal/`, `/work/`, `/references/`). Change
+  it to fit your life.
+- **Names.** Lowercase kebab-case, dates first for things that happened on a day.
+- **Labels in the Open Knowledge Format.** Every Markdown file carries a short YAML frontmatter
+  in [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md), the
+  open format published by Google Cloud for knowledge that people and agents share: what kind of
+  thing the file is (`type`), a one-line `description`, `tags`, and who wrote it and when
+  (`generated`). Any tool that reads OKF can read your memory.
+- **How to work.** Search before writing, edit rather than rewrite, commit with a message, never
+  store a secret.
 
-- /projects/<name>/: one folder per project, with a README.md that says what it is.
-- /people/: one file per person I work with.
-- /inbox.md: anything unsorted. I tidy it on Fridays.
+## `get_organisation`, the first call
 
-Rules for agents:
-- Search before creating a file; prefer editing to rewriting.
-- Write in English. Dates as 2026-10-08.
-- Commit with a message when you finish a piece of work.
+Every MCP client gets a `get_organisation` tool, and the server tells agents to call it before
+anything else. It returns the file and the current time, because an agent has no clock and your
+files carry dates. The REST API has it too: `GET /api/organisation`.
+
+```bash
+curl http://localhost:3000/api/organisation
 ```
 
-Because it is a file, you edit it like any other, and its history shows how your rules changed.
-
-## 2. Add a `get_organisation` tool
-
-A harness reads the tool list when it connects. A tool that says "call me first" puts your rules
-in front of every agent, whichever harness it runs in. Add it as a module,
-`src/modules/organisation/server.ts`:
-
-```ts
-import { tool } from '#/server/mcp'
-import type { ServerModule } from '#/server/module'
-
-const PATH = '/organisation.md'
-
-export const organisation: ServerModule = {
-  id: 'organisation',
-  setup: ({ services: { files } }) => ({
-    tools: (mcp) =>
-      tool(
-        mcp,
-        'get_organisation',
-        'Call this first, before any other tool: it returns how this memory (openmemfs) is organised and the rules for agents, plus the current time.',
-        {},
-        async () => {
-          const file = await files.getByPath(PATH).catch(() => null)
-          return {
-            organisation: file?.content ?? `No ${PATH} yet. Ask the person how they want their memory organised.`,
-            now: new Date().toISOString(),
-          }
-        },
-      ),
-  }),
-}
-```
-
-Register it in `src/modules/server.ts`:
-
-```ts
-import { organisation } from './organisation/server'
-
-export const serverModules: ServerModule[] = [history, organisation]
-```
-
-The current time is there because an agent has no clock, and your files will carry dates.
+Change harness and nothing changes: the next agent reads the same rules.
 
 Next: [Extend openmemfs](04-extend.md).

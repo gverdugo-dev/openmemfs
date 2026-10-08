@@ -6,7 +6,10 @@ import type { Search, Services } from './services'
  * The REST door. Each route reads the request, calls one service and returns its answer:
  * no rule lives here. Every route has an MCP tool twin in `mcp.ts`.
  */
-export function coreRoutes(api: Api, { files, folders, tags, categories }: Services) {
+export function coreRoutes(api: Api, { files, folders, tags, categories, organisation }: Services) {
+  // The rules of the memory, written from the template the first time
+  api.get('/organisation', async (c) => c.json(await organisation.get()))
+
   // Files
   api.get('/files', async (c) => {
     const search: Search = {

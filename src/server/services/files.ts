@@ -94,6 +94,9 @@ export interface Write {
 /** Runs inside the transaction of every create and update, with the file as written. */
 export type WriteHook = (tx: Tx, file: File, write: Write) => Promise<void>
 
+/** The rules of the memory: always there, at the root, under this name (see `organisation.ts`). */
+export const ORGANISATION_PATH = '/organisation.md'
+
 export const MAX_CONTENT_BYTES = 1024 * 1024
 export const MAX_METADATA_BYTES = 64 * 1024
 const SNIPPET_BEFORE = 60
@@ -197,6 +200,8 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
       return sql
         .begin(async (tx) => {
           const current = await lock(tx, id, input.ifRevision)
+          if (current.path === ORGANISATION_PATH && path !== undefined && path !== current.path)
+            throw invalid(`${ORGANISATION_PATH} cannot be moved or renamed: every agent looks for it there`)
           if (path !== undefined && path !== current.path) await checkNoClash(tx, path, id)
           await tx`
             update files set
@@ -276,7 +281,11 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
     },
 
     async remove(id: string): Promise<void> {
-      const deleted = await sql`delete from files where id = ${checkId(id, 'file')} returning id`
+      const deleted = await sql`delete from files where id = ${checkId(id, 'file')} and path <> ${ORGANISATION_PATH} returning id`
+      if (deleted.length === 0) {
+        const [kept] = await sql`select 1 from files where id = ${id}`
+        if (kept) throw invalid(`${ORGANISATION_PATH} cannot be deleted: edit it instead`)
+      }
       if (deleted.length === 0) throw notFound(`no file with id ${id}`)
     },
   }

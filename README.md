@@ -36,6 +36,8 @@ extended by modules.
 - **Search**: by file name, by content or both, filtered by tags (all of them), by category (with
   its subcategories) and by folder. Every search has a link.
 - **Conflicts**: if an agent changes a file you have open, nothing is overwritten; you choose.
+- **Organisation**: `/organisation.md` is always at the root, with your rules for the memory and
+  its labels in the Open Knowledge Format (OKF). Agents read it first with `get_organisation`.
 - **Modules**: new tabs, pages, routes and tables live in `src/modules/`, each in its own folder.
 
 ## Guides

@@ -21,7 +21,7 @@ write.
 
 1. [Your context, yours](01-your-context.md): this page.
 2. [Connect your agent](02-connect-your-agent.md): the MCP endpoint, in one command.
-3. [Give your agent an organisation](03-organisation.md): one file that tells every harness how your memory works.
+3. [Your organisation file](03-organisation.md): the rules every harness reads first, in the Open Knowledge Format.
 4. [Extend openmemfs](04-extend.md): modules, and what to add first.
 5. [Add authentication](05-authentication.md): before it leaves your machine.
 6. [Deploy it](06-deploy.md): Google Cloud Run and a free Supabase database.

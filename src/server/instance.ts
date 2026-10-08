@@ -25,5 +25,8 @@ async function start() {
     const applied = await migrate(sql)
     if (applied.length) console.log(`applied ${applied.join(', ')}`)
   }
-  return { app: createApp(sql, config) }
+  const app = createApp(sql, config)
+  // /organisation.md is always there, so it shows in the explorer before any agent asks for it.
+  await app.request('http://localhost/api/organisation')
+  return { app }
 }

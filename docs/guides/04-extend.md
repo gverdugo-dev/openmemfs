@@ -22,8 +22,6 @@ Review the change, run `bun run check` and keep it if it works. It is your softw
 
 ## What people usually add first
 
-- [An organisation file and a `get_organisation` tool](03-organisation.md), so every harness starts
-  with your rules.
 - [Authentication](05-authentication.md), before the memory leaves your machine.
 - [A deployment](06-deploy.md), so your agents reach it from anywhere.
 - Views for your own kinds of file: a tab that renders a recipe, a draft post or a meeting note
