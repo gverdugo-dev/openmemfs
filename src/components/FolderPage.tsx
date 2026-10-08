@@ -3,6 +3,7 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { type ReactNode, useMemo, useState } from 'react'
 import { type Entry, folders } from '#/lib/api'
 import { folderTagsQuery, foldersQuery, searchQuery } from '#/lib/queries'
+import { Breadcrumbs } from './Breadcrumbs'
 import { CategoryBadge } from './Categories'
 import { FileIcon, FolderIcon, GridIcon, ListIcon } from './Icons'
 import { NewFile, NewFolder } from './NewFile'
@@ -83,19 +84,7 @@ export function FolderPage({ folder, layout = 'grid' }: { folder: string; layout
 
   return (
     <Page>
-      <nav className="flex flex-wrap items-center gap-1 font-mono text-xs text-ink-3" aria-label="Folder path">
-        <Link to="/" search={{ view: 'folder', folder: '/', layout }} className="hover:text-ink hover:underline">
-          /
-        </Link>
-        {segments.slice(0, -1).map((segment, i) => {
-          const path = `/${segments.slice(0, i + 1).join('/')}/`
-          return (
-            <Link key={path} to="/" search={{ view: 'folder', folder: path, layout }} className="hover:text-ink hover:underline">
-              {segment}/
-            </Link>
-          )
-        })}
-      </nav>
+      <Breadcrumbs folder={folder === '/' ? '/' : parent} layout={layout} />
       <h1 className="mt-2 flex items-center gap-3 text-4xl md:text-5xl">
         <FolderIcon open className="size-9 shrink-0 md:size-11" />
         {segments.at(-1) || '/'}

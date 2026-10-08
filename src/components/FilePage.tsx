@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { ApiError, type FileData, files } from '#/lib/api'
 import type { FileTab, WritePatch } from '#/lib/module'
 import { fileQuery, filesQuery } from '#/lib/queries'
+import { Breadcrumbs } from './Breadcrumbs'
 import { CategorySelect } from './Categories'
 import { Page } from './Page'
 import { TagEditor } from './Tags'
@@ -143,7 +144,7 @@ export function FilePage({ path, tab, tabs }: Props) {
   return (
     <Page>
       <div className="flex items-center justify-between gap-4">
-        <p className="truncate font-mono text-xs text-ink-3">{folder}</p>
+        <Breadcrumbs folder={folder} />
         <div className="flex shrink-0 items-center gap-3">
           <SavingState saving={saving} />
           <button type="button" className="btn btn-ghost h-8 px-2 text-xs" onClick={remove}>
