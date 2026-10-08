@@ -1,6 +1,5 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { Workspace } from '#/components/Workspace'
-import { isSignedIn } from '#/lib/session'
 import { placeOf } from '#/lib/place'
 
 /**
@@ -10,9 +9,6 @@ import { placeOf } from '#/lib/place'
  */
 export const Route = createFileRoute('/')({
   validateSearch: placeOf,
-  beforeLoad: async () => {
-    if (!(await isSignedIn())) throw redirect({ to: '/sign-in' })
-  },
   ssr: false,
   component: function Index() {
     return <Workspace place={Route.useSearch()} />

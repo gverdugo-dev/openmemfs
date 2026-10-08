@@ -2,7 +2,7 @@
  * The only errors a caller may see. Anything else is internal: it is logged and the caller
  * gets "internal error". The HTTP status of each code lives in `statusOf`.
  */
-export type ErrorCode = 'invalid' | 'not_found' | 'conflict' | 'stale' | 'unauthorized'
+export type ErrorCode = 'invalid' | 'not_found' | 'conflict' | 'stale'
 
 export class DomainError extends Error {
   constructor(
@@ -13,12 +13,10 @@ export class DomainError extends Error {
   }
 }
 
-export function statusOf(code: ErrorCode): 400 | 401 | 404 | 409 {
+export function statusOf(code: ErrorCode): 400 | 404 | 409 {
   switch (code) {
     case 'invalid':
       return 400
-    case 'unauthorized':
-      return 401
     case 'not_found':
       return 404
     case 'conflict':

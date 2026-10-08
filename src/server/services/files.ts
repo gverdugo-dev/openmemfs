@@ -3,7 +3,7 @@ import { DomainError, invalid, notFound } from '../errors'
 import { checkPath } from '../paths'
 import { checkId, isUniqueViolation, likePattern } from './shared'
 
-/** Who wrote: a person in the editor (cookie session) or an agent (API or MCP, with the token). */
+/** Who wrote: a person in the editor, or an agent (the API without the editor's header, or MCP). */
 export type Author = 'user' | 'agent'
 
 export type Metadata = Record<string, unknown>

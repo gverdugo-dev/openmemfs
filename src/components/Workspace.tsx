@@ -1,6 +1,4 @@
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
-import { useEffect } from 'react'
 import { webModules } from '#/modules/web'
 import { filesQuery } from '#/lib/queries'
 import type { Place } from '#/lib/place'
@@ -16,15 +14,7 @@ const pages = webModules.flatMap((m) => m.pages ?? [])
 
 /** The sidebar on the left and, on the right, a module page, search, tags and categories, a folder, a file, or the home. */
 export function Workspace({ place }: { place: Place }) {
-  const navigate = useNavigate()
   const { data: entries = [] } = useQuery(filesQuery)
-
-  // Any 401 from the API (the token changed, the cookie expired) sends the reader to sign in.
-  useEffect(() => {
-    const out = () => void navigate({ to: '/sign-in' })
-    window.addEventListener('openmemfs:signed-out', out)
-    return () => window.removeEventListener('openmemfs:signed-out', out)
-  }, [navigate])
 
   const page = pages.find((p) => p.id === place.page)
 

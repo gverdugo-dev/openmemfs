@@ -66,19 +66,17 @@ export class ApiError extends Error {
 }
 
 /**
- * Calls the API with the session cookie. Every call carries the X-Openmemfs header, which
- * the server requires on browser writes so another site cannot write through the cookie.
+ * Calls the API. Every call carries the X-Openmemfs header, so the history says the person
+ * wrote it and not an agent.
  */
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method,
-    credentials: 'same-origin',
     headers: { 'X-Openmemfs': '1', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   if (res.status === 204) return undefined as T
   const data = await res.json().catch(() => ({}))
-  if (res.status === 401) window.dispatchEvent(new Event('openmemfs:signed-out'))
   if (!res.ok) throw new ApiError(res.status, data.error ?? res.statusText, data.code)
   return data as T
 }

@@ -9,7 +9,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      // A memory is private: no search engine should list its sign-in page.
+      // A memory is private: no search engine should list it.
       { name: 'robots', content: 'noindex' },
       { title: 'openmemfs' },
     ],

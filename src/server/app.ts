@@ -2,11 +2,9 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { Hono } from 'hono'
 import { serverModules } from '#/modules/server'
 import { coreRoutes } from './api'
-import { createAuth } from './auth'
 import type { Config } from './config'
 import type { Sql } from './db'
 import { DomainError, statusOf } from './errors'
-import { body } from './http'
 import { coreTools, createMcpHandler } from './mcp'
 import type { Api, AppEnv, ServerModule } from './module'
 import { createServices, type WriteHook } from './services'
@@ -16,13 +14,19 @@ import { createServices, type WriteHook } from './services'
  * and the MCP endpoint at /mcp, each with the parts every module adds. TanStack Start hands
  * those paths here (src/routes/api/$.ts and src/routes/mcp.ts); the pages are its own.
  */
+/** The editor sends it on every call, so its writes are by `user`; everything else is by `agent`. */
+export const EDITOR_HEADER = 'X-Openmemfs'
+
 export function createApp(sql: Sql, config: Config, modules: ServerModule[] = serverModules) {
   const hooks: WriteHook[] = []
   const services = createServices(sql, hooks)
-  const auth = createAuth(config.token)
-
   const api: Api = new Hono<AppEnv>()
-  api.use(auth.require)
+  // There is no access control: whoever reaches the server reads and writes. The header only
+  // says who wrote, for the history: the editor sends it, agents do not.
+  api.use(async (c, next) => {
+    c.set('author', c.req.header(EDITOR_HEADER) === '1' ? 'user' : 'agent')
+    return next()
+  })
   coreRoutes(api, services)
   const tools: ((mcp: McpServer) => void)[] = [(mcp) => coreTools(mcp, services)]
 
@@ -44,22 +48,13 @@ export function createApp(sql: Sql, config: Config, modules: ServerModule[] = se
   })
 
   app.get('/api/health', (c) => c.json({ ok: true }))
-  app.post('/api/session', async (c) => {
-    const { token } = await body<{ token?: unknown }>(c.req.raw)
-    if (typeof token !== 'string' || !auth.signIn(c, token)) return c.json({ error: 'wrong token' }, 401)
-    return c.body(null, 204)
-  })
-  app.delete('/api/session', (c) => {
-    auth.signOut(c)
-    return c.body(null, 204)
-  })
   app.route('/api', api)
   app.all('/api/*', (c) => c.json({ error: 'no such route' }, 404))
 
   const mcp = createMcpHandler((server) => {
     for (const register of tools) register(server)
   })
-  app.all('/mcp', auth.requireAgent, (c) => mcp(c.req.raw))
+  app.all('/mcp', (c) => mcp(c.req.raw))
 
   return app
 }

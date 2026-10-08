@@ -6,14 +6,12 @@ import { migrate } from './migrate'
 
 // These tests empty the tables, so they only run against TEST_DATABASE_URL, never DATABASE_URL.
 const url = process.env.TEST_DATABASE_URL
-const TOKEN = 'test-token-0123456789abcdef'
 
 describe.skipIf(!url)('the API', () => {
   let sql: Sql
   let app: ReturnType<typeof createApp>
   const config = (window: number): Config => ({
     databaseUrl: url!,
-    token: TOKEN,
     versionWindowSeconds: window,
     migrateOnStart: false,
   })
@@ -31,7 +29,7 @@ describe.skipIf(!url)('the API', () => {
   const call = (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) =>
     app.request(`http://localhost/api${path}`, {
       method,
-      headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json', ...headers },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   const json = async (res: Response) => ({ status: res.status, body: (await res.json()) as any })
@@ -102,8 +100,7 @@ describe.skipIf(!url)('the API', () => {
     versions = (await json(await call('GET', `/files/${file.body.id}/versions`))).body
     expect(versions).toHaveLength(2)
 
-    const cookie = await signIn()
-    await call('PATCH', `/files/${file.body.id}`, { content: 'by hand' }, { Authorization: '', Cookie: cookie, 'X-Openmemfs': '1' })
+    await call('PATCH', `/files/${file.body.id}`, { content: 'by hand' }, { 'X-Openmemfs': '1' })
     versions = (await json(await call('GET', `/files/${file.body.id}/versions`))).body
     expect(versions[0]).toMatchObject({ version: 3, author: 'user' })
 
@@ -129,24 +126,10 @@ describe.skipIf(!url)('the API', () => {
     expect((await call('POST', `/files/${file.body.id}/versions/9/restore`)).status).toBe(404)
   })
 
-  test('access needs the token or a session, and browser writes need the header', async () => {
-    expect((await call('GET', '/files', undefined, { Authorization: '' })).status).toBe(401)
-    expect((await call('GET', '/files', undefined, { Authorization: 'Bearer wrong' })).status).toBe(401)
+  test('everything is open: no token, no session', async () => {
     expect((await app.request('http://localhost/api/health')).status).toBe(200)
-
-    const wrong = await app.request('http://localhost/api/session', {
-      method: 'POST',
-      body: JSON.stringify({ token: 'nope' }),
-    })
-    expect(wrong.status).toBe(401)
-
-    const cookie = await signIn()
-    expect(cookie).toContain('HttpOnly')
-    const asUser = { Authorization: '', Cookie: cookie }
-    expect((await call('GET', '/session', undefined, asUser)).status).toBe(200)
-    expect((await call('POST', '/files', { path: '/u.md' }, asUser)).status).toBe(403)
-    const created = await json(await call('POST', '/files', { path: '/u.md' }, { ...asUser, 'X-Openmemfs': '1' }))
-    expect(created.status).toBe(201)
+    expect((await call('GET', '/files')).status).toBe(200)
+    expect((await call('POST', '/files', { path: '/u.md' })).status).toBe(201)
   })
 
   test('unknown API routes are 404 and do not fall through to the editor', async () => {
@@ -235,11 +218,11 @@ describe.skipIf(!url)('the API', () => {
     expect(edited.body).toMatchObject({ content: '1 two two', revision: 2 })
   })
 
-  test('MCP tools reach the same services, and need the Bearer token', async () => {
-    const rpc = (method: string, params: unknown, auth = `Bearer ${TOKEN}`) =>
+  test('MCP tools reach the same services', async () => {
+    const rpc = (method: string, params: unknown) =>
       app.request('http://localhost/mcp', {
         method: 'POST',
-        headers: { Authorization: auth, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
       })
     const callTool = async (name: string, args: unknown) => {
@@ -248,8 +231,6 @@ describe.skipIf(!url)('the API', () => {
       return { error: result.isError === true, value: result.isError ? text : JSON.parse(text) }
     }
 
-    expect((await rpc('tools/list', {}, 'Bearer wrong')).status).toBe(403)
-    expect((await rpc('tools/list', {}, '')).status).toBe(403)
     const list = (await (await rpc('tools/list', {})).json()) as any
     const names = list.result.tools.map((t: { name: string }) => t.name)
     for (const name of ['list_files', 'create_file', 'edit_file', 'tag_folder', 'create_category', 'restore_version']) {
@@ -268,13 +249,4 @@ describe.skipIf(!url)('the API', () => {
     const versions = await callTool('list_versions', { path: '/mcp/note.md' })
     expect(versions.value).toMatchObject([{ version: 1, author: 'agent' }])
   })
-
-  async function signIn(): Promise<string> {
-    const res = await app.request('http://localhost/api/session', {
-      method: 'POST',
-      body: JSON.stringify({ token: TOKEN }),
-    })
-    expect(res.status).toBe(204)
-    return res.headers.get('Set-Cookie')!
-  }
 })

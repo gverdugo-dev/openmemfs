@@ -1,5 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { type ReactNode, useMemo, useState } from 'react'
 import type { Entry } from '#/lib/api'
 import type { ModulePage } from '#/lib/module'
@@ -41,14 +40,6 @@ interface Props {
 export function Sidebar({ entries, place, pages }: Props) {
   const tree = useMemo(() => treeOf(entries), [entries])
   const [creating, setCreating] = useState(false)
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-
-  async function signOut() {
-    await fetch('/api/session', { method: 'DELETE' })
-    queryClient.clear()
-    await navigate({ to: '/sign-in' })
-  }
 
   return (
     <aside className="flex h-full flex-col border-r border-line bg-wash">
@@ -56,9 +47,6 @@ export function Sidebar({ entries, place, pages }: Props) {
         <Link to="/" className="font-display text-lg font-extrabold tracking-tight text-black">
           openmemfs
         </Link>
-        <button type="button" className="text-xs text-ink-3 hover:text-black" onClick={() => void signOut()}>
-          Sign out
-        </button>
       </div>
       <div className="px-3 pb-3">
         <button type="button" className="btn btn-primary w-full" onClick={() => setCreating(true)}>

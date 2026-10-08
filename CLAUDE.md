@@ -9,7 +9,7 @@ here exists so that two agents working on openmemfs end up writing it the same w
 text files kept in Postgres, with three tabs on every file (Content, Metadata, History), tags on
 files and folders, categories and subcategories, and search by name and content. Agents reach the
 same memory through a REST API and an MCP endpoint. It is small on purpose and grows by
-**modules**. Anyone deploys it anywhere: one container, one Postgres, one token.
+**modules**. Anyone deploys it anywhere: one container and one Postgres.
 
 ```
    browser (React) ──/api──┐                                       Postgres
@@ -47,21 +47,19 @@ src/
   start.ts           request middleware: security headers
   routes/
     __root.tsx       the document: head, noindex, 404
-    index.tsx        the workspace (see lib/place.ts); redirects to /sign-in without a session
-    sign-in.tsx      the token form
+    index.tsx        the workspace (see lib/place.ts)
     api/$.ts         every /api request, handed to the app
     mcp.ts           /mcp, handed to the same app
-  server/            the core: config, db, auth, services, the two doors, migrations
+  server/            the core: config, db, services, the two doors, migrations
     instance.ts      getServer(): config, db, migrations and the app, once per process
     services/        files.ts (the only code that writes `files`), tags.ts, categories.ts, shared.ts
     api.ts           the REST door: one route per service operation
     mcp.ts           the MCP door: one tool per service operation, and `tool()` for modules
     module.ts        the ServerModule contract
-    app.ts           auth, both doors and module wiring
+    app.ts           both doors and module wiring
   lib/
     api.ts           the browser's API client (adds X-Openmemfs)
     queries.ts       the query keys and options shared by every component
-    session.ts       isSignedIn, a server function the routes use in beforeLoad
     module.ts        the WebModule contract
   lib/place.ts       the workspace's query string (?path, ?view, ?q, ?tag...) read once
   components/        Workspace, Sidebar, FilePage, Search, FolderPage, Organize, and the pieces
@@ -92,7 +90,7 @@ bun run build        # the app into .output/
 bun run start        # the built server (PORT, default 3000)
 bun run migrate      # apply pending migrations and exit
 bun run check        # tsc --noEmit and bun test
-docker compose up    # Postgres and the app on :8080 (needs OPENMEMFS_TOKEN)
+docker compose up    # Postgres and the app on 127.0.0.1:8080
 ```
 
 Tests that touch the database run only with `TEST_DATABASE_URL`, and they empty it. Never point it
@@ -124,19 +122,17 @@ at a database with data.
   file or on a folder above it; `category`; `prefix` for a folder. A content hit carries a
   `snippet`.
 
-## Auth
+## No access control
 
-One token, `OPENMEMFS_TOKEN`. There are no users.
+There is no login, no token and no users, on purpose: the core stays minimal and access control
+is left to whoever deploys it (guides will show how). Whoever reaches the server reads and writes
+everything, through the pages, `/api` and `/mcp`. Do not add a check to the core; a way to close
+it belongs in a module or in the deployment.
 
-- Agents send `Authorization: Bearer <token>` and their writes are by `agent`.
-- `/mcp` takes only the Bearer token. Without it the answer is **403, not 401**: a 401 makes MCP
-  clients start OAuth discovery and show its 404 instead of the real problem.
-- People type the token on the sign-in page, which sets an HttpOnly, SameSite=Strict cookie. Their
-  writes are by `user`.
-- A request authenticated by the cookie must carry `X-Openmemfs: 1` to write. Other sites cannot
-  send that header without a preflight, so the cookie alone never writes. `src/lib/api.ts` adds it.
-- Open without a token: `GET /api/health`, `POST /api/session`, `DELETE /api/session`, the
-  sign-in page and the assets. Every other page redirects to `/sign-in` in `beforeLoad`. Everything else under `/api` is closed. A new route is closed by default; keep it so.
+- Who wrote is only a label for the history: the editor sends `X-Openmemfs: 1` on every call
+  (`src/lib/api.ts`) and writes as `user`; everything else, the API without it and every MCP
+  tool, writes as `agent`.
+- `docker-compose.yml` publishes the port on 127.0.0.1 only. Keep it so.
 
 ## The API and the MCP tools
 
@@ -172,7 +168,7 @@ without sessions at `/mcp`: every request builds its server, so any instance ans
 carry the same message as the API's; anything that is not a domain error is `internal error` and
 goes to the log.
 
-Errors are `{ "error": "...", "code": "invalid|not_found|conflict|stale|unauthorized" }` with the
+Errors are `{ "error": "...", "code": "invalid|not_found|conflict|stale" }` with the
 matching status. The message is written to be read by the caller, often a model.
 
 ## Adding a module
@@ -184,7 +180,7 @@ the ones it needs.
    - `id`: the folder name.
    - `migrations`: `'src/modules/<id>/migrations'` if it has tables (relative to the project root,
      because the built server runs from `.output/`).
-   - `setup(ctx)` returns `routes(api)` to add routes under `/api` (already authenticated; prefix
+   - `setup(ctx)` returns `routes(api)` to add routes under `/api` (prefix
      them with the module id or hang them under `/files/:id/<id>`), `tools(mcp)` to add MCP tools
      with `tool()` from `#/server/mcp`, and `afterWrite(tx, file, write)` to react to every file
      write inside its transaction.

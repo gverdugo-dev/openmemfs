@@ -7,8 +7,6 @@ import type { Search, Services } from './services'
  * no rule lives here. Every route has an MCP tool twin in `mcp.ts`.
  */
 export function coreRoutes(api: Api, { files, tags, categories }: Services) {
-  api.get('/session', (c) => c.json({ author: c.get('author') }))
-
   // Files
   api.get('/files', async (c) => {
     const search: Search = {

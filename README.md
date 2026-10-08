@@ -33,19 +33,22 @@ extended by modules.
 With Docker:
 
 ```bash
-OPENMEMFS_TOKEN=$(openssl rand -hex 32) docker compose up
+docker compose up
 ```
 
-Open http://localhost:8080 and type the token.
+Open http://localhost:8080.
 
-Anywhere else, build the `Dockerfile` and give it two variables: `DATABASE_URL` (any Postgres 13+)
-and `OPENMEMFS_TOKEN` (at least 16 characters). Migrations run on the first request. See `.env.example` for
-the rest.
+Anywhere else, build the `Dockerfile` and give it `DATABASE_URL` (any Postgres 13+). Migrations run
+on the first request. See `.env.example` for the rest.
+
+**There is no login and no key.** Whoever reaches the server reads, writes and deletes everything,
+through the interface, the API and MCP. Run it on your own machine, or put it behind something that
+controls access (a private network, a VPN, your host's authentication) before you expose it.
 
 Locally, with Bun and a Postgres:
 
 ```bash
-cp .env.example .env   # fill DATABASE_URL and OPENMEMFS_TOKEN
+cp .env.example .env   # fill DATABASE_URL
 bun install
 bun run dev            # http://localhost:3000
 ```
@@ -54,15 +57,14 @@ To let an agent write, call the API:
 
 ```bash
 curl -X POST http://localhost:8080/api/files \
-  -H "Authorization: Bearer $OPENMEMFS_TOKEN" -H 'Content-Type: application/json' \
+  -H 'Content-Type: application/json' \
   -d '{"path": "/notes/today.md", "content": "# Today\n\n- ship it", "metadata": {"status": "draft"}}'
 ```
 
 Or connect an MCP client. With Claude Code:
 
 ```bash
-claude mcp add --transport http openmemfs http://localhost:8080/mcp \
-  --header "Authorization: Bearer $OPENMEMFS_TOKEN"
+claude mcp add --transport http openmemfs http://localhost:8080/mcp
 ```
 
 The agent gets a tool for everything the interface does: list and search files, read, create,
@@ -72,8 +74,8 @@ versions.
 ## Structure
 
 ```
-src/routes/   the pages (sign-in, the workspace) and /api
-src/server/   the core: services, auth, migrations, the REST and MCP doors
+src/routes/   the workspace page, /api and /mcp
+src/server/   the core: services, migrations, the REST and MCP doors
 src/modules/  content, metadata, history, and yours
 src/components/ the editor shell
 migrations/   the core tables: files, categories, tags
@@ -83,12 +85,12 @@ migrations/   the core tables: files, categories, tags
 
 openmemfs is the public, deployable version of a private memory service it grew out of:
 the same idea (text files in Postgres, one service layer behind an HTTP door and an MCP door) with
-its own editor built in and no dependency on any other resource. It needs one container, one
-Postgres and one token, and runs wherever those do.
+its own editor built in and no dependency on any other resource. It needs one container and one
+Postgres, and runs wherever those do.
 
 ## More information
 
-- [CLAUDE.md](CLAUDE.md): the whole API, the MCP tools, the data model, the auth model and how to
+- [CLAUDE.md](CLAUDE.md): the whole API, the MCP tools, the data model and how to
   write a module.
 - `.env.example`: every variable the server reads.
 - [LICENSE](LICENSE): MIT.

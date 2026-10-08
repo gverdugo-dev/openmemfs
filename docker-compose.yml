@@ -1,5 +1,5 @@
 # Everything on one machine: Postgres and openmemfs. `docker compose up -d`, then open
-# http://localhost:8080 and sign in with OPENMEMFS_TOKEN from your .env.
+# http://localhost:8080. There is no login: the port only listens on this machine.
 services:
   db:
     image: postgres:17-alpine
@@ -21,9 +21,8 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://openmemfs:openmemfs@db:5432/openmemfs
-      OPENMEMFS_TOKEN: ${OPENMEMFS_TOKEN:?set OPENMEMFS_TOKEN in .env (openssl rand -hex 32)}
     ports:
-      - '8080:8080'
+      - '127.0.0.1:8080:8080'
 
 volumes:
   db:
