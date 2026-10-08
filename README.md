@@ -9,7 +9,8 @@ extended by modules.
 | **What it is** | A self-hosted file memory: an editor for people, an API for agents |
 | **Status** | v0.1: editor, metadata, version history, tags, categories, search, REST and MCP, modules |
 | **Stack** | TanStack Start, React, TanStack Query, Hono, Postgres, TipTap, Tailwind, Bun |
-| **License** | MIT |
+| **Repo** | `gverdugo-dev/openmemfs`, public, MIT |
+| **Part of** | `personal-public-resources`, the container of Gonzalo Verdugo's personal resources |
 
 ## What it does
 
@@ -27,7 +28,7 @@ extended by modules.
 - **Conflicts**: if an agent changes a file you have open, nothing is overwritten; you choose.
 - **Modules**: new tabs, pages, routes and tables live in `src/modules/`, each in its own folder.
 
-## Run it
+## How to use it
 
 With Docker:
 
@@ -49,7 +50,7 @@ bun install
 bun run dev            # http://localhost:3000
 ```
 
-## Let an agent write
+To let an agent write, call the API:
 
 ```bash
 curl -X POST http://localhost:8080/api/files \
@@ -68,8 +69,6 @@ The agent gets a tool for everything the interface does: list and search files, 
 edit, move and delete them, tag files and folders, manage tags and categories, and read or restore
 versions.
 
-The whole API, the tools, the auth model and how to write a module are in [CLAUDE.md](CLAUDE.md).
-
 ## Structure
 
 ```
@@ -80,6 +79,16 @@ src/components/ the editor shell
 migrations/   the core tables: files, categories, tags
 ```
 
-## License
+## How it fits
 
-MIT. See [LICENSE](LICENSE).
+openmemfs is the public, deployable version of a private memory service it grew out of:
+the same idea (text files in Postgres, one service layer behind an HTTP door and an MCP door) with
+its own editor built in and no dependency on any other resource. It needs one container, one
+Postgres and one token, and runs wherever those do.
+
+## More information
+
+- [CLAUDE.md](CLAUDE.md): the whole API, the MCP tools, the data model, the auth model and how to
+  write a module.
+- `.env.example`: every variable the server reads.
+- [LICENSE](LICENSE): MIT.
