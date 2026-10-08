@@ -1,4 +1,4 @@
-import type { Tx } from '../db'
+import type { Tables, Tx } from '../db'
 import { invalid, notFound } from '../errors'
 import { COLORS, type Color } from '#/lib/colors'
 
@@ -63,9 +63,9 @@ export async function lockStructure(tx: Tx): Promise<void> {
  * Drops the tags of folders that no longer exist: no file under them and no created folder.
  * A folder that comes back later with the same path starts without tags.
  */
-export async function dropOrphanFolderTags(tx: Tx): Promise<void> {
+export async function dropOrphanFolderTags(tb: Tables, tx: Tx): Promise<void> {
   await tx`
-    delete from folder_tags dt
-    where not exists (select 1 from files where starts_with(path, dt.folder))
-      and not exists (select 1 from folders where starts_with(path, dt.folder))`
+    delete from ${tb.folder_tags} dt
+    where not exists (select 1 from ${tb.files} where starts_with(path, dt.folder))
+      and not exists (select 1 from ${tb.folders} where starts_with(path, dt.folder))`
 }

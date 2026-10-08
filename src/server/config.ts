@@ -1,3 +1,4 @@
+import { DEFAULT_SCHEMA } from './db'
 import { LOOPBACK_HOSTS } from './guard'
 
 export interface Config {
@@ -7,6 +8,8 @@ export interface Config {
   versionWindowSeconds: number
   /** Whether the server applies pending migrations when it starts. */
   migrateOnStart: boolean
+  /** The Postgres schema of every table, `public` by default. */
+  schema?: string
   /** The host names /api and /mcp answer to, or '*' for any. Loopback names by default. */
   allowedHosts?: string[] | '*'
 }
@@ -20,6 +23,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     versionWindowSeconds: integer(env.VERSION_WINDOW_SECONDS, 300),
     migrateOnStart: env.MIGRATE_ON_START !== 'false',
     allowedHosts: hosts(env.ALLOWED_HOSTS),
+    schema: schemaName(env.DATABASE_SCHEMA),
   }
 }
 
@@ -35,4 +39,12 @@ function integer(value: string | undefined, fallback: number): number {
   const n = Number(value)
   if (!Number.isInteger(n) || n < 0) throw new Error(`expected a non-negative integer, got "${value}"`)
   return n
+}
+
+/** A plain Postgres identifier: it goes into every query and every migration. */
+function schemaName(value: string | undefined): string {
+  if (value === undefined || value.trim() === '') return DEFAULT_SCHEMA
+  const name = value.trim()
+  if (!/^[a-z_][a-z0-9_]{0,62}$/.test(name)) throw new Error(`DATABASE_SCHEMA must be lowercase letters, digits and _, got "${value}"`)
+  return name
 }

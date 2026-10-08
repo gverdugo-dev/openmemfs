@@ -1,4 +1,4 @@
-import type { Sql, Tx } from '../db'
+import { type Sql, type Tables, tablesOf, type Tx } from '../db'
 import { DomainError, invalid, notFound } from '../errors'
 import { checkPath } from '../paths'
 import { checkId, dropOrphanFolderTags, isUniqueViolation, likePattern, lockStructure } from './shared'
@@ -109,7 +109,7 @@ export type Files = ReturnType<typeof createFiles>
  * tools, a module) calls it instead of writing SQL of its own. It is the only code that
  * writes the `files` table.
  */
-export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
+export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables = tablesOf(sql)) {
   async function runHooks(tx: Tx, file: File, write: Write) {
     for (const hook of afterWrite) await hook(tx, file, write)
   }
@@ -129,16 +129,16 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
 
       return sql<Entry[]>`
         select f.id, f.path, octet_length(f.content) as size, f.revision, f.category_id, f.updated_at,
-          ${tagsOf(sql)} as tags,
+          ${tagsOf(tb, sql)} as tags,
           coalesce((
-            select array_agg(distinct t.name) from folder_tags dt join tags t on t.id = dt.tag_id
+            select array_agg(distinct t.name) from ${tb.folder_tags} dt join ${tb.tags} t on t.id = dt.tag_id
             where starts_with(f.path, dt.folder)
           ), '{}') as folder_tags,
           case when ${byContent} and f.content ilike ${pattern} then
             substr(f.content, greatest(strpos(lower(f.content), lower(${query})) - ${SNIPPET_BEFORE}, 1), ${SNIPPET_LENGTH})
           end as snippet
-        from files f
-        left join categories c on c.id = f.category_id
+        from ${tb.files} f
+        left join ${tb.categories} c on c.id = f.category_id
         where starts_with(f.path, ${prefix})
           and (${query}::text is null
             or (${byName} and regexp_replace(f.path, '^.*/', '') ilike ${pattern})
@@ -147,23 +147,23 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
           and not exists (
             select 1 from unnest(${tags}::text[]) as wanted(name)
             where not exists (
-              select 1 from file_tags ft join tags t on t.id = ft.tag_id
+              select 1 from ${tb.file_tags} ft join ${tb.tags} t on t.id = ft.tag_id
               where ft.file_id = f.id and lower(t.name) = wanted.name
             ) and not exists (
-              select 1 from folder_tags dt join tags t on t.id = dt.tag_id
+              select 1 from ${tb.folder_tags} dt join ${tb.tags} t on t.id = dt.tag_id
               where starts_with(f.path, dt.folder) and lower(t.name) = wanted.name
             ))
         order by f.path collate "C"`
     },
 
     async get(id: string): Promise<File> {
-      return one(sql, checkId(id, 'file'))
+      return one(tb, sql, checkId(id, 'file'))
     },
 
     async getByPath(path: string): Promise<File> {
-      const [row] = await sql<{ id: string }[]>`select id from files where path = ${checkPath(path)}`
+      const [row] = await sql<{ id: string }[]>`select id from ${tb.files} where path = ${checkPath(path)}`
       if (!row) throw notFound(`no file ${path}`)
-      return one(sql, row.id)
+      return one(tb, sql, row.id)
     },
 
     /** A file by its id or its path, whichever the caller has: agents mostly know paths. */
@@ -179,14 +179,14 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
       const metadata = checkMetadata(input.metadata ?? {})
       return sql.begin(async (tx) => {
         await lockStructure(tx)
-        await checkNoClash(tx, path, null)
+        await checkNoClash(tb, tx, path, null)
         const [row] = await tx<{ id: string }[]>`
-          insert into files (path, content, metadata)
+          insert into ${tb.files} (path, content, metadata)
           values (${path}, ${content}, ${tx.json(metadata as never)})
           on conflict (path) do nothing
           returning id`
         if (!row) throw new DomainError('conflict', `${path} already exists`)
-        const file = await one(tx, row.id)
+        const file = await one(tb, tx, row.id)
         await runHooks(tx, file, write)
         return file
       })
@@ -200,24 +200,24 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
       checkRevision(input.ifRevision)
       return sql
         .begin(async (tx) => {
-          const current = await lock(tx, id, input.ifRevision)
+          const current = await lock(tb, tx, id, input.ifRevision)
           if (current.path === ORGANISATION_PATH && path !== undefined && path !== current.path)
             throw invalid(`${ORGANISATION_PATH} cannot be moved or renamed: every agent looks for it there`)
           const moved = path !== undefined && path !== current.path
           if (moved) {
             await lockStructure(tx)
-            await checkNoClash(tx, path, id)
+            await checkNoClash(tb, tx, path, id)
           }
           await tx`
-            update files set
+            update ${tb.files} set
               path = ${path ?? current.path},
               content = ${content ?? current.content},
               metadata = ${tx.json((metadata ?? current.metadata) as never)},
               revision = revision + 1,
               updated_at = now()
             where id = ${id}`
-          if (moved) await dropOrphanFolderTags(tx)
-          const file = await one(tx, id)
+          if (moved) await dropOrphanFolderTags(tb, tx)
+          const file = await one(tb, tx, id)
           await runHooks(tx, file, { ...write, checkpoint: write.checkpoint || input.checkpoint })
           return file
         })
@@ -253,22 +253,22 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
         .begin(async (tx) => {
           await lockStructure(tx)
           const [source] = await tx`
-            select 1 from files where starts_with(path, ${from})
-            union all select 1 from folders where starts_with(path, ${from}) limit 1`
+            select 1 from ${tb.files} where starts_with(path, ${from})
+            union all select 1 from ${tb.folders} where starts_with(path, ${from}) limit 1`
           if (!source) throw notFound(`no folder ${from}`)
           const [taken] = await tx<{ path: string }[]>`
-            select path from files where starts_with(path, ${to}) or ${to} = path || '/' or starts_with(${to}, path || '/')
-            union all select path from folders where starts_with(path, ${to}) limit 1`
+            select path from ${tb.files} where starts_with(path, ${to}) or ${to} = path || '/' or starts_with(${to}, path || '/')
+            union all select path from ${tb.folders} where starts_with(path, ${to}) limit 1`
           if (taken) throw new DomainError('conflict', `${to} is taken: ${taken.path} is already there`)
           // Tags left behind by a folder that used to be at the destination would collide.
-          await dropOrphanFolderTags(tx)
+          await dropOrphanFolderTags(tb, tx)
           const moved = await tx<{ id: string; path: string }[]>`
-            update files set path = ${to} || substr(path, ${from.length + 1}), revision = revision + 1, updated_at = now()
+            update ${tb.files} set path = ${to} || substr(path, ${from.length + 1}), revision = revision + 1, updated_at = now()
             where starts_with(path, ${from}) returning id, path`
           for (const file of moved) checkPath(file.path)
-          await tx`update folders set path = ${to} || substr(path, ${from.length + 1}) where starts_with(path, ${from})`
-          await tx`update folder_tags set folder = ${to} || substr(folder, ${from.length + 1}) where starts_with(folder, ${from})`
-          for (const { id } of moved) await runHooks(tx, await one(tx, id), write)
+          await tx`update ${tb.folders} set path = ${to} || substr(path, ${from.length + 1}) where starts_with(path, ${from})`
+          await tx`update ${tb.folder_tags} set folder = ${to} || substr(folder, ${from.length + 1}) where starts_with(folder, ${from})`
+          for (const { id } of moved) await runHooks(tx, await one(tb, tx, id), write)
           return to
         })
         .catch((error) => {
@@ -282,22 +282,22 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
       checkId(id, 'file')
       if (categoryId !== null) {
         checkId(categoryId, 'category')
-        const [found] = await sql`select 1 from categories where id = ${categoryId}`
+        const [found] = await sql`select 1 from ${tb.categories} where id = ${categoryId}`
         if (!found) throw notFound(`no category with id ${categoryId}`)
       }
-      const updated = await sql`update files set category_id = ${categoryId} where id = ${id} returning id`
+      const updated = await sql`update ${tb.files} set category_id = ${categoryId} where id = ${id} returning id`
       if (updated.length === 0) throw notFound(`no file with id ${id}`)
-      return one(sql, id)
+      return one(tb, sql, id)
     },
 
     async remove(id: string): Promise<void> {
       checkId(id, 'file')
       await sql.begin(async (tx) => {
-        const [current] = await tx<{ path: string }[]>`select path from files where id = ${id} for update`
+        const [current] = await tx<{ path: string }[]>`select path from ${tb.files} where id = ${id} for update`
         if (!current) throw notFound(`no file with id ${id}`)
         if (current.path === ORGANISATION_PATH) throw invalid(`${ORGANISATION_PATH} cannot be deleted: edit it instead`)
-        await tx`delete from files where id = ${id}`
-        await dropOrphanFolderTags(tx)
+        await tx`delete from ${tb.files} where id = ${id}`
+        await dropOrphanFolderTags(tb, tx)
       })
     },
   }
@@ -305,31 +305,31 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
 }
 
 /** The direct tags of the file aliased `f`, sorted, as a SQL fragment. */
-function tagsOf(sql: Sql | Tx) {
+function tagsOf(tb: Tables, sql: Sql | Tx) {
   return sql`coalesce((
-    select array_agg(t.name order by lower(t.name)) from file_tags ft join tags t on t.id = ft.tag_id
+    select array_agg(t.name order by lower(t.name)) from ${tb.file_tags} ft join ${tb.tags} t on t.id = ft.tag_id
     where ft.file_id = f.id
   ), '{}')`
 }
 
 /** One file with its tags and the tags of its folders. */
-async function one(sql: Sql | Tx, id: string): Promise<File> {
+async function one(tb: Tables, sql: Sql | Tx, id: string): Promise<File> {
   const [file] = await sql<File[]>`
-    select f.*, ${tagsOf(sql)} as tags,
+    select f.*, ${tagsOf(tb, sql)} as tags,
       coalesce((
         select json_agg(json_build_object('folder', dt.folder, 'tag', t.name) order by dt.folder, lower(t.name))
-        from folder_tags dt join tags t on t.id = dt.tag_id
+        from ${tb.folder_tags} dt join ${tb.tags} t on t.id = dt.tag_id
         where starts_with(f.path, dt.folder)
       ), '[]') as folder_tags
-    from files f where f.id = ${id}`
+    from ${tb.files} f where f.id = ${id}`
   if (!file) throw notFound(`no file with id ${id}`)
   return file
 }
 
 /** Locks the row for a write and checks the revision the caller read. */
-async function lock(tx: Tx, id: string, ifRevision: number | undefined) {
+async function lock(tb: Tables, tx: Tx, id: string, ifRevision: number | undefined) {
   const [current] = await tx<Pick<File, 'path' | 'content' | 'metadata' | 'revision'>[]>`
-    select path, content, metadata, revision from files where id = ${id} for update`
+    select path, content, metadata, revision from ${tb.files} where id = ${id} for update`
   if (!current) throw notFound(`no file with id ${id}`)
   if (ifRevision !== undefined && current.revision !== ifRevision) throw staleError(current, ifRevision)
   return current
@@ -346,13 +346,13 @@ function staleError(current: { path: string; revision: number }, ifRevision: num
  * A name cannot be a file and a folder at once: "/a" and "/a/b.md" cannot both exist, and
  * neither can a file "/a" and an empty folder "/a/".
  */
-async function checkNoClash(tx: Tx, path: string, ownId: string | null) {
+async function checkNoClash(tb: Tables, tx: Tx, path: string, ownId: string | null) {
   const [clash] = await tx<{ path: string }[]>`
-    select path from files
+    select path from ${tb.files}
     where (${ownId}::uuid is null or id <> ${ownId}::uuid)
       and (starts_with(path, ${path + '/'}) or starts_with(${path}, path || '/'))
     union all
-    select path from folders where starts_with(path, ${path + '/'})
+    select path from ${tb.folders} where starts_with(path, ${path + '/'})
     limit 1`
   if (clash) {
     throw new DomainError('conflict', `${path} clashes with ${clash.path}: a name cannot be a file and a folder`)

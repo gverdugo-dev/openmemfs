@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { serverModules } from '#/modules/server'
 import { coreRoutes } from './api'
 import type { Config } from './config'
-import type { Sql } from './db'
+import { type Sql, tablesOf } from './db'
 import { DomainError, statusOf } from './errors'
 import { LOOPBACK_HOSTS, requestGuard } from './guard'
 import { coreTools, createMcpHandler, describe } from './mcp'
@@ -20,7 +20,8 @@ export const EDITOR_HEADER = 'X-Openmemfs'
  */
 export function createApp(sql: Sql, config: Config, modules: ServerModule[] = serverModules) {
   const hooks: WriteHook[] = []
-  const services = createServices(sql, hooks)
+  const tables = tablesOf(sql, config.schema)
+  const services = createServices(sql, hooks, tables)
   const api: Api = new Hono<AppEnv>()
   // There is no access control: whoever reaches the server reads and writes. The header only
   // says who wrote, for the history: the editor sends it, agents do not.
@@ -35,7 +36,7 @@ export function createApp(sql: Sql, config: Config, modules: ServerModule[] = se
   for (const module of modules) {
     if (seen.has(module.id)) throw new Error(`two modules are called ${module.id}`)
     seen.add(module.id)
-    const parts = module.setup?.({ sql, services, config }) ?? {}
+    const parts = module.setup?.({ sql, table: tables.table, services, config }) ?? {}
     if (parts.afterWrite) hooks.push(parts.afterWrite)
     parts.routes?.(api)
     if (parts.tools) tools.push(parts.tools)

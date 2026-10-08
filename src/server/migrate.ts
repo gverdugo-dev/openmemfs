@@ -1,7 +1,8 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serverModules } from '#/modules/server'
-import { connect, type Sql } from './db'
+import { loadConfig } from './config'
+import { connect, DEFAULT_SCHEMA, type Sql } from './db'
 import type { ServerModule } from './module'
 
 /** Migration folders are relative to the project root, where the server and the CLI run. */
@@ -16,7 +17,12 @@ const LOCK_KEY = 4_206_573_353
  * in `openmemfs_migrations` as `<owner>/<file>`. A transaction-scoped advisory lock lets
  * several instances start at once, also behind a transaction pooler. Returns the ids it applied.
  */
-export async function migrate(sql: Sql, modules: ServerModule[] = serverModules): Promise<string[]> {
+export async function migrate(
+  sql: Sql,
+  modules: ServerModule[] = serverModules,
+  schema: string = DEFAULT_SCHEMA,
+): Promise<string[]> {
+  const control = sql(`${schema}.openmemfs_migrations`)
   const sources = [{ owner: 'core', dir: CORE_MIGRATIONS }]
   for (const module of modules) if (module.migrations) sources.push({ owner: module.id, dir: module.migrations })
 
@@ -24,8 +30,9 @@ export async function migrate(sql: Sql, modules: ServerModule[] = serverModules)
   // Under the lock too: two `create table if not exists` at once can still collide.
   await sql.begin(async (tx) => {
     await tx`select pg_advisory_xact_lock(${LOCK_KEY})`
+    await tx`create schema if not exists ${sql(schema)}`
     await tx`
-      create table if not exists openmemfs_migrations (
+      create table if not exists ${control} (
         id text primary key,
         applied_at timestamptz not null default now()
       )`
@@ -42,10 +49,13 @@ export async function migrate(sql: Sql, modules: ServerModule[] = serverModules)
       const ran = await sql
         .begin(async (tx) => {
           await tx`select pg_advisory_xact_lock(${LOCK_KEY})`
-          const [done] = await tx`select 1 from openmemfs_migrations where id = ${id}`
+          const [done] = await tx`select 1 from ${control} where id = ${id}`
           if (done) return false
+          // Migration files name their tables plainly; inside this transaction they land in the
+          // schema. `set local` ends with the transaction, so it holds behind a pooler too.
+          await tx`select set_config('search_path', ${schema}, true)`
           await tx.unsafe(text)
-          await tx`insert into openmemfs_migrations (id) values (${id})`
+          await tx`insert into ${control} (id) values (${id})`
           return true
         })
         .catch((error: Error) => {
@@ -58,10 +68,9 @@ export async function migrate(sql: Sql, modules: ServerModule[] = serverModules)
 }
 
 if (import.meta.main) {
-  const url = process.env.DATABASE_URL
-  if (!url) throw new Error('DATABASE_URL is not set')
-  const sql = connect(url)
-  const applied = await migrate(sql)
+  const config = loadConfig()
+  const sql = connect(config.databaseUrl)
+  const applied = await migrate(sql, serverModules, config.schema)
   console.log(applied.length ? `applied ${applied.join(', ')}` : 'nothing to migrate')
   await sql.end()
 }

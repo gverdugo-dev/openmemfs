@@ -1,4 +1,4 @@
-import type { Sql, Tx } from '../db'
+import { type Sql, type Tables, tablesOf, type Tx } from '../db'
 import { DomainError, invalid, notFound } from '../errors'
 import { checkPath } from '../paths'
 import { type Color, checkColor, checkId, checkName, colorFor, isUniqueViolation } from './shared'
@@ -20,14 +20,14 @@ export type Tags = ReturnType<typeof createTags>
  * its name everywhere (it is unique), and putting one on a file or folder creates it if it
  * does not exist yet. A folder is named by its path with the trailing slash ("/notes/").
  */
-export function createTags(sql: Sql) {
+export function createTags(sql: Sql, tb: Tables = tablesOf(sql)) {
   const tags = {
     async list(): Promise<Tag[]> {
       return sql<Tag[]>`
         select t.id, t.name, t.color,
-          (select count(*)::int from file_tags ft where ft.tag_id = t.id) as files,
-          coalesce((select array_agg(dt.folder order by dt.folder) from folder_tags dt where dt.tag_id = t.id), '{}') as folders
-        from tags t order by lower(t.name)`
+          (select count(*)::int from ${tb.file_tags} ft where ft.tag_id = t.id) as files,
+          coalesce((select array_agg(dt.folder order by dt.folder) from ${tb.folder_tags} dt where dt.tag_id = t.id), '{}') as folders
+        from ${tb.tags} t order by lower(t.name)`
     },
 
     /** Creates a tag. Without a colour it gets one from its name. */
@@ -35,7 +35,7 @@ export function createTags(sql: Sql) {
       const checked = checkName(name, 'tag')
       const paint = color === undefined || color === null ? colorFor(checked) : checkColor(color)
       const [row] = await sql<{ id: string }[]>`
-        insert into tags (name, color) values (${checked}, ${paint}) on conflict ((lower(name))) do nothing returning id`
+        insert into ${tb.tags} (name, color) values (${checked}, ${paint}) on conflict ((lower(name))) do nothing returning id`
       if (!row) throw new DomainError('conflict', `the tag ${checked} already exists`)
       return tags.get(checked)
     },
@@ -51,7 +51,7 @@ export function createTags(sql: Sql) {
       const current = await tags.get(name)
       const checked = change.name === undefined || change.name === null ? current.name : checkName(change.name, 'tag')
       const color = change.color === undefined || change.color === null ? current.color : checkColor(change.color)
-      const updated = await sql`update tags set name = ${checked}, color = ${color} where id = ${current.id} returning id`
+      const updated = await sql`update ${tb.tags} set name = ${checked}, color = ${color} where id = ${current.id} returning id`
         .catch((error) => {
           if (isUniqueViolation(error)) throw new DomainError('conflict', `the tag ${checked} already exists`)
           throw error
@@ -62,31 +62,31 @@ export function createTags(sql: Sql) {
 
     /** Deletes the tag, and with it every place it was put. Files and folders stay. */
     async remove(name: string): Promise<void> {
-      const deleted = await sql`delete from tags where lower(name) = lower(${name.trim()}) returning id`
+      const deleted = await sql`delete from ${tb.tags} where lower(name) = lower(${name.trim()}) returning id`
       if (deleted.length === 0) throw notFound(`no tag ${name}`)
     },
 
     async tagFile(fileId: string, name: string): Promise<void> {
       checkId(fileId, 'file')
       await sql.begin(async (tx) => {
-        const tagId = await ensure(tx, name)
-        const [file] = await tx`select 1 from files where id = ${fileId}`
+        const tagId = await ensure(tb, tx, name)
+        const [file] = await tx`select 1 from ${tb.files} where id = ${fileId}`
         if (!file) throw notFound(`no file with id ${fileId}`)
-        await tx`insert into file_tags (file_id, tag_id) values (${fileId}, ${tagId}) on conflict do nothing`
+        await tx`insert into ${tb.file_tags} (file_id, tag_id) values (${fileId}, ${tagId}) on conflict do nothing`
       })
     },
 
     async untagFile(fileId: string, name: string): Promise<void> {
       checkId(fileId, 'file')
       await sql`
-        delete from file_tags where file_id = ${fileId}
-          and tag_id = (select id from tags where lower(name) = lower(${name.trim()}))`
+        delete from ${tb.file_tags} where file_id = ${fileId}
+          and tag_id = (select id from ${tb.tags} where lower(name) = lower(${name.trim()}))`
     },
 
     /** The tags of a folder itself, not of the folders above it. */
     async ofFolder(folder: string): Promise<string[]> {
       const rows = await sql<{ name: string }[]>`
-        select t.name from folder_tags dt join tags t on t.id = dt.tag_id
+        select t.name from ${tb.folder_tags} dt join ${tb.tags} t on t.id = dt.tag_id
         where dt.folder = ${checkFolder(folder)} order by lower(t.name)`
       return rows.map((r) => r.name)
     },
@@ -95,11 +95,11 @@ export function createTags(sql: Sql) {
       const checked = checkFolder(folder)
       await sql.begin(async (tx) => {
         const [inside] = await tx`
-          select 1 from files where starts_with(path, ${checked})
-          union all select 1 from folders where starts_with(path, ${checked}) limit 1`
+          select 1 from ${tb.files} where starts_with(path, ${checked})
+          union all select 1 from ${tb.folders} where starts_with(path, ${checked}) limit 1`
         if (!inside) throw notFound(`no folder ${checked}`)
-        const tagId = await ensure(tx, name)
-        await tx`insert into folder_tags (folder, tag_id) values (${checked}, ${tagId}) on conflict do nothing`
+        const tagId = await ensure(tb, tx, name)
+        await tx`insert into ${tb.folder_tags} (folder, tag_id) values (${checked}, ${tagId}) on conflict do nothing`
       })
       return tags.ofFolder(checked)
     },
@@ -107,8 +107,8 @@ export function createTags(sql: Sql) {
     async untagFolder(folder: string, name: string): Promise<string[]> {
       const checked = checkFolder(folder)
       await sql`
-        delete from folder_tags where folder = ${checked}
-          and tag_id = (select id from tags where lower(name) = lower(${name.trim()}))`
+        delete from ${tb.folder_tags} where folder = ${checked}
+          and tag_id = (select id from ${tb.tags} where lower(name) = lower(${name.trim()}))`
       return tags.ofFolder(checked)
     },
   }
@@ -116,10 +116,10 @@ export function createTags(sql: Sql) {
 }
 
 /** The id of the tag with this name, creating it when it does not exist. */
-async function ensure(tx: Tx, name: string): Promise<string> {
+async function ensure(tb: Tables, tx: Tx, name: string): Promise<string> {
   const checked = checkName(name, 'tag')
-  await tx`insert into tags (name, color) values (${checked}, ${colorFor(checked)}) on conflict ((lower(name))) do nothing`
-  const [tag] = await tx<{ id: string }[]>`select id from tags where lower(name) = lower(${checked})`
+  await tx`insert into ${tb.tags} (name, color) values (${checked}, ${colorFor(checked)}) on conflict ((lower(name))) do nothing`
+  const [tag] = await tx<{ id: string }[]>`select id from ${tb.tags} where lower(name) = lower(${checked})`
   return tag!.id
 }
 

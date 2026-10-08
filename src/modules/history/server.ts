@@ -35,13 +35,14 @@ export type VersionEntry = Omit<Version, 'content' | 'metadata'> & { size: numbe
 export const history: ServerModule = {
   id: 'history',
   migrations: 'src/modules/history/migrations',
-  setup: ({ sql, services: { files }, config }) => {
+  setup: ({ sql, table, services: { files }, config }) => {
+    const versionsTable = table('file_versions')
     const versions = {
       async list(fileId: string): Promise<VersionEntry[]> {
         const file = await files.get(fileId)
         return sql<VersionEntry[]>`
           select version, path, author, message, octet_length(content) as size, created_at, updated_at
-          from file_versions where file_id = ${file.id} order by version desc`
+          from ${versionsTable} where file_id = ${file.id} order by version desc`
       },
 
       async get(fileId: string, raw: unknown): Promise<Version> {
@@ -50,7 +51,7 @@ export const history: ServerModule = {
         if (!Number.isInteger(n) || n < 1) throw invalid('version must be a positive integer')
         const [version] = await sql<Version[]>`
           select version, path, content, metadata, author, message, created_at, updated_at
-          from file_versions where file_id = ${file.id} and version = ${n}`
+          from ${versionsTable} where file_id = ${file.id} and version = ${n}`
         if (!version) throw notFound(`no version ${n} of ${file.path}`)
         return version
       },
@@ -62,11 +63,11 @@ export const history: ServerModule = {
         if (!message) throw invalid('a commit needs a message')
         if (message.length > MAX_MESSAGE_LENGTH) throw invalid(`a commit message is ${MAX_MESSAGE_LENGTH} characters at most`)
         const [latest] = await sql<{ version: number; message: string | null }[]>`
-          select version, message from file_versions where file_id = ${file.id} order by version desc limit 1`
+          select version, message from ${versionsTable} where file_id = ${file.id} order by version desc limit 1`
         if (!latest) throw invalid(`${file.path} has no versions yet`)
         if (latest.message !== null) throw invalid(`nothing changed in ${file.path} since the last commit`)
         const [committed] = await sql<VersionEntry[]>`
-          update file_versions set message = ${message}
+          update ${versionsTable} set message = ${message}
           where file_id = ${file.id} and version = ${latest.version} and message is null
           returning version, path, author, message, octet_length(content) as size, created_at, updated_at`
         // Someone else committed it in between.
@@ -86,18 +87,18 @@ export const history: ServerModule = {
           select id, version,
             author = ${author} and message is null and updated_at > now() - make_interval(secs => ${config.versionWindowSeconds}) as fold,
             path = ${file.path} and content = ${file.content} and metadata = ${tx.json(file.metadata as never)} as same
-          from file_versions where file_id = ${file.id}
+          from ${versionsTable} where file_id = ${file.id}
           order by version desc limit 1 for update`
         if (latest?.same) return
         if (latest?.fold && !checkpoint) {
           await tx`
-            update file_versions set path = ${file.path}, content = ${file.content},
+            update ${versionsTable} set path = ${file.path}, content = ${file.content},
               metadata = ${tx.json(file.metadata as never)}, updated_at = now()
             where id = ${latest.id}`
           return
         }
         await tx`
-          insert into file_versions (file_id, version, path, content, metadata, author)
+          insert into ${versionsTable} (file_id, version, path, content, metadata, author)
           values (${file.id}, ${(latest?.version ?? 0) + 1}, ${file.path}, ${file.content},
             ${tx.json(file.metadata as never)}, ${author})`
       },

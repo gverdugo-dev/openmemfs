@@ -226,7 +226,8 @@ the ones it needs.
    - Put its operations in one object (its service) and call it from both its routes and its
      tools, as `src/modules/history/server.ts` does. Every route has a tool twin.
    - It reads and writes files through `ctx.services.files`, never with its own SQL on `files`. Its own
-     tables are its own.
+     tables are its own, and its queries name them with `ctx.table('<id>_...')`, never plainly:
+     the memory may live in a schema of its own (`DATABASE_SCHEMA`).
    - Throw `invalid()` / `notFound()` from `#/server/errors`; never build an error response by hand.
    - Register it in `src/modules/server.ts`.
 2. **Front side**, `src/modules/<id>/web.tsx`, exporting a `WebModule` (see `src/lib/module.ts`):
@@ -253,6 +254,11 @@ Then add tests for its routes and tools next to `src/server/app.test.ts` and run
 - **Never edit or rename a migration that has been released.** Someone has already applied it.
   Change the schema with the next number.
 - Use Postgres that any host has (13 or newer, no extensions beyond the built-in ones).
+- Every table lives in one schema, `DATABASE_SCHEMA` (`public` by default), so the memory can share
+  a database with other apps. Migration files name tables plainly: the migrator sets `search_path`
+  locally inside each transaction. Queries never rely on `search_path`, which a pooler in
+  transaction mode does not keep: services name tables with `tables` (`tablesOf` in `db.ts`) and
+  modules with `ctx.table()`.
 - The server applies pending migrations on its first request unless `MIGRATE_ON_START=false`. The
   Docker image carries `migrations/` and `src/modules/` for that; a module with tables needs nothing more.
 

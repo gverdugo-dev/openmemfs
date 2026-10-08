@@ -2,6 +2,7 @@ import { createApp } from './app'
 import { loadConfig } from './config'
 import { connect } from './db'
 import { migrate } from './migrate'
+import { serverModules } from '#/modules/server'
 
 /**
  * The one server of this process, built on the first request: it reads the configuration,
@@ -22,7 +23,7 @@ async function start() {
   const config = loadConfig()
   const sql = connect(config.databaseUrl)
   if (config.migrateOnStart) {
-    const applied = await migrate(sql)
+    const applied = await migrate(sql, serverModules, config.schema)
     if (applied.length) console.log(`applied ${applied.join(', ')}`)
   }
   const app = createApp(sql, config)

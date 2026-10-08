@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { Hono } from 'hono'
 import type { Config } from './config'
-import type { Sql } from './db'
+import type { Sql, Table } from './db'
 import type { Author, Services, WriteHook } from './services'
 
 /** What every request handler can read: who is writing. */
@@ -12,6 +12,11 @@ export type Api = Hono<AppEnv>
 
 export interface ModuleContext {
   sql: Sql
+  /**
+   * A table qualified with the schema the memory lives in: `select * from ${table('history_x')}`.
+   * Every query names its tables through it; none relies on `search_path`.
+   */
+  table: (name: string) => Table
   /** The service layer. A module writes files through it, never with its own SQL on `files`. */
   services: Services
   config: Config

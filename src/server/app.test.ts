@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import postgres from 'postgres'
+import { serverModules } from '#/modules/server'
 import { createApp } from './app'
 import type { Config } from './config'
 import { connect, type Sql } from './db'
@@ -379,5 +381,33 @@ describe.skipIf(!url)('the API', () => {
     await call('POST', '/files', { path: '/gone/b.md' })
     const again = await json(await call('GET', '/folders/tags?folder=/gone/'))
     expect(again.body).toEqual([])
+  })
+
+  test('a schema of its own keeps every table there, with no search_path to lean on', async () => {
+    await sql`drop schema if exists om_schema_test cascade`
+    // A connection whose search_path finds nothing, like a pooler that does not keep it.
+    const bare = postgres(url!, { prepare: false, onnotice: () => {}, connection: { search_path: 'nowhere' } })
+    try {
+      const applied = await migrate(bare, serverModules, 'om_schema_test')
+      expect(applied).toContain('core/0001_files.sql')
+      expect(await migrate(bare, serverModules, 'om_schema_test')).toEqual([])
+      const own = createApp(bare, { ...config(300), schema: 'om_schema_test' })
+      const req = (method: string, path: string, body?: unknown) =>
+        own.request(`http://localhost/api${path}`, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        })
+      const file = (await (await req('POST', '/files', { path: '/s/a.md', content: 'here' })).json()) as any
+      expect(file.path).toBe('/s/a.md')
+      expect((await req('POST', `/files/${file.id}/tags`, { tag: 'x' })).status).toBe(200)
+      expect((await req('POST', `/files/${file.id}/commit`, { message: 'first' })).status).toBe(201)
+      const rows = await sql<{ n: number }[]>`select count(*)::int as n from om_schema_test.files`
+      expect(rows[0]!.n).toBe(1)
+      expect((await sql`select 1 from files where path = '/s/a.md'`).length).toBe(0)
+    } finally {
+      await bare.end()
+      await sql`drop schema if exists om_schema_test cascade`
+    }
   })
 })

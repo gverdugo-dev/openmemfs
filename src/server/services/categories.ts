@@ -1,4 +1,4 @@
-import type { Sql } from '../db'
+import { type Sql, type Tables, tablesOf } from '../db'
 import { DomainError, invalid, notFound } from '../errors'
 import { type Color, checkColor, checkId, checkName, colorFor, isUniqueViolation } from './shared'
 
@@ -26,15 +26,15 @@ export type Categories = ReturnType<typeof createCategories>
  * Categories and subcategories: two levels, no more. A file is put in one with
  * `files.setCategory`; filtering by a category also finds the files of its subcategories.
  */
-export function createCategories(sql: Sql) {
+export function createCategories(sql: Sql, tb: Tables = tablesOf(sql)) {
   const categories = {
     /** Every category, each followed by its subcategories, by name. */
     async list(): Promise<Category[]> {
       return sql<Category[]>`
         select c.id, c.name, c.color, c.parent_id,
-          (select count(*)::int from files f where f.category_id = c.id) as files
-        from categories c
-        left join categories p on p.id = c.parent_id
+          (select count(*)::int from ${tb.files} f where f.category_id = c.id) as files
+        from ${tb.categories} c
+        left join ${tb.categories} p on p.id = c.parent_id
         order by lower(coalesce(p.name, c.name)), c.parent_id is not null, lower(c.name)`
     },
 
@@ -56,7 +56,7 @@ export function createCategories(sql: Sql) {
       }
       const color = input.color === undefined || input.color === null ? colorFor(name) : checkColor(input.color)
       const [row] = await sql<{ id: string }[]>`
-        insert into categories (name, parent_id, color) values (${name}, ${parentId}, ${color}) returning id`.catch(clash(name))
+        insert into ${tb.categories} (name, parent_id, color) values (${name}, ${parentId}, ${color}) returning id`.catch(clash(name))
       return categories.get(row!.id)
     },
 
@@ -65,13 +65,13 @@ export function createCategories(sql: Sql) {
       const current = await categories.get(id)
       const name = change.name === undefined || change.name === null ? current.name : checkName(change.name, 'category')
       const color = change.color === undefined || change.color === null ? current.color : checkColor(change.color)
-      await sql`update categories set name = ${name}, color = ${color} where id = ${id}`.catch(clash(name))
+      await sql`update ${tb.categories} set name = ${name}, color = ${color} where id = ${id}`.catch(clash(name))
       return categories.get(id)
     },
 
     /** Deletes it with its subcategories. Their files stay, without a category. */
     async remove(id: string): Promise<void> {
-      const deleted = await sql`delete from categories where id = ${checkId(id, 'category')} returning id`
+      const deleted = await sql`delete from ${tb.categories} where id = ${checkId(id, 'category')} returning id`
       if (deleted.length === 0) throw notFound(`no category with id ${id}`)
     },
   }

@@ -1,5 +1,5 @@
 import { DomainError, notFound } from '../errors'
-import type { Sql } from '../db'
+import { type Sql, type Tables, tablesOf } from '../db'
 import { lockStructure } from './shared'
 import { checkFolder } from './tags'
 
@@ -8,14 +8,14 @@ import { checkFolder } from './tags'
  * it can be empty, and it is a row of `folders`). Listing gives both kinds, with every folder
  * on the way to them.
  */
-export function createFolders(sql: Sql) {
+export function createFolders(sql: Sql, tb: Tables = tablesOf(sql)) {
   const folders = {
     /** Every folder, with its trailing slash, sorted. */
     async list(): Promise<string[]> {
       const rows = await sql<{ path: string }[]>`
-        select path from folders
+        select path from ${tb.folders}
         union
-        select left(path, length(path) - position('/' in reverse(path)) + 1) from files`
+        select left(path, length(path) - position('/' in reverse(path)) + 1) from ${tb.files}`
       const all = new Set<string>()
       for (const { path } of rows) {
         const segments = path.slice(1, -1).split('/').filter(Boolean)
@@ -30,13 +30,13 @@ export function createFolders(sql: Sql) {
       return sql.begin(async (tx) => {
         await lockStructure(tx)
         const [file] = await tx<{ path: string }[]>`
-          select path from files where ${path} = path || '/' or starts_with(${path}, path || '/') limit 1`
+          select path from ${tb.files} where ${path} = path || '/' or starts_with(${path}, path || '/') limit 1`
         if (file) throw new DomainError('conflict', `${path} clashes with ${file.path}: a name cannot be a file and a folder`)
         const [exists] = await tx`
-          select 1 from folders where path = ${path}
-          union all select 1 from files where starts_with(path, ${path}) limit 1`
+          select 1 from ${tb.folders} where path = ${path}
+          union all select 1 from ${tb.files} where starts_with(path, ${path}) limit 1`
         if (exists) throw new DomainError('conflict', `the folder ${path} already exists`)
-        await tx`insert into folders (path) values (${path})`
+        await tx`insert into ${tb.folders} (path) values (${path})`
         return path
       })
     },
@@ -45,11 +45,11 @@ export function createFolders(sql: Sql) {
     async remove(raw: unknown): Promise<void> {
       const path = checkFolder(raw)
       await sql.begin(async (tx) => {
-        const [file] = await tx`select 1 from files where starts_with(path, ${path}) limit 1`
+        const [file] = await tx`select 1 from ${tb.files} where starts_with(path, ${path}) limit 1`
         if (file) throw new DomainError('conflict', `${path} has files: delete or move them first`)
-        const removed = await tx`delete from folders where starts_with(path, ${path}) returning path`
+        const removed = await tx`delete from ${tb.folders} where starts_with(path, ${path}) returning path`
         if (removed.length === 0) throw notFound(`no folder ${path}`)
-        await tx`delete from folder_tags where starts_with(folder, ${path})`
+        await tx`delete from ${tb.folder_tags} where starts_with(folder, ${path})`
       })
     },
   }
