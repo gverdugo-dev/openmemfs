@@ -265,6 +265,25 @@ describe.skipIf(!url)('the API', () => {
     expect((await call('DELETE', '/folders?path=/ideas/')).status).toBe(404)
   })
 
+  test('a folder moves with its files, empty folders and tags, and not onto something taken', async () => {
+    await call('POST', '/files', { path: '/a/one.md' })
+    await call('POST', '/files', { path: '/a/b/two.md' })
+    await call('POST', '/files', { path: '/c/three.md' })
+    await call('POST', '/folders', { path: '/a/empty/' })
+    await call('POST', '/folders/tags', { folder: '/a/b/', tag: 'deep' })
+
+    expect((await call('POST', '/folders/move', { from: '/a/', to: '/c/' })).status).toBe(409)
+    expect((await call('POST', '/folders/move', { from: '/a/', to: '/a/b/x/' })).status).toBe(400)
+    expect((await call('POST', '/folders/move', { from: '/nope/', to: '/x/' })).status).toBe(404)
+
+    const moved = await json(await call('POST', '/folders/move', { from: '/a/', to: '/c/a/' }))
+    expect(moved.body).toEqual({ path: '/c/a/' })
+    const list = await json(await call('GET', '/files'))
+    expect(list.body.map((f: { path: string }) => f.path)).toEqual(['/c/a/b/two.md', '/c/a/one.md', '/c/three.md'])
+    expect(list.body[0].folder_tags).toEqual(['deep'])
+    expect((await json(await call('GET', '/folders'))).body).toEqual(['/c/', '/c/a/', '/c/a/b/', '/c/a/empty/'])
+  })
+
   test('edit replaces a piece that appears exactly once', async () => {
     const file = await json(await call('POST', '/files', { path: '/e.md', content: 'one two two' }))
     expect((await call('POST', `/files/${file.body.id}/edit`, { old_string: 'two', new_string: '2' })).status).toBe(400)

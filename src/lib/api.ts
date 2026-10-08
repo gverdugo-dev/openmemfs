@@ -113,6 +113,7 @@ export const folders = {
   list: () => api<string[]>('GET', '/folders'),
   create: (path: string) => api<{ path: string }>('POST', '/folders', { path }),
   remove: (path: string) => api<void>('DELETE', `/folders?path=${enc(path)}`),
+  move: (from: string, to: string) => api<{ path: string }>('POST', '/folders/move', { from, to }),
   tags: (folder: string) => api<string[]>('GET', `/folders/tags?folder=${enc(folder)}`),
   tag: (folder: string, tag: string) => api<string[]>('POST', '/folders/tags', { folder, tag }),
   untag: (folder: string, tag: string) => api<string[]>('DELETE', `/folders/tags?folder=${enc(folder)}&tag=${enc(tag)}`),

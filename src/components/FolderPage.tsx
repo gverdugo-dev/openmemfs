@@ -6,6 +6,7 @@ import { folderTagsQuery, foldersQuery, searchQuery } from '#/lib/queries'
 import { Breadcrumbs } from './Breadcrumbs'
 import { CategoryBadge } from './Categories'
 import { FileIcon, FolderIcon, GridIcon, ListIcon } from './Icons'
+import { dragProps, useDropTarget } from './Move'
 import { NewFile, NewFolder } from './NewFile'
 import { Page } from './Page'
 import { TagEditor, TagList } from './Tags'
@@ -87,7 +88,7 @@ export function FolderPage({ folder, layout = 'grid' }: { folder: string; layout
       <Breadcrumbs folder={folder === '/' ? '/' : parent} layout={layout} />
       <h1 className="mt-2 flex items-center gap-3 text-4xl md:text-5xl">
         <FolderIcon open className="size-9 shrink-0 md:size-11" />
-        {segments.at(-1) || '/'}
+        {segments.at(-1) || 'All files'}
       </h1>
 
       {folder !== '/' && (
@@ -172,18 +173,18 @@ function Grid({ folders: children, files, layout }: ContentsProps) {
     <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       {children.map((child) => (
         <li key={child.path}>
-          <Link to="/" search={{ view: 'folder', folder: child.path, layout }} className={`${tile} h-full`}>
+          <FolderLink folder={child.path} layout={layout} className={`${tile} h-full`}>
             <FolderIcon className="size-7 text-ink" />
             <span className="truncate font-display font-bold text-ink" title={child.name}>
               {child.name}
             </span>
             <span className="mt-auto text-xs text-ink-3">{count(child.files)}</span>
-          </Link>
+          </FolderLink>
         </li>
       ))}
       {files.map((file) => (
         <li key={file.id}>
-          <Link to="/" search={{ path: file.path }} className={`${tile} h-full`}>
+          <Link to="/" search={{ path: file.path }} className={`${tile} h-full`} {...dragProps({ kind: 'file', id: file.id, path: file.path })}>
             <FileIcon className="size-7 text-ink-2" />
             <span className="truncate font-display font-bold text-ink" title={nameOf(file)}>
               {nameOf(file)}
@@ -205,16 +206,16 @@ function List({ folders: children, files, layout }: ContentsProps) {
     <ul className="border-t border-line">
       {children.map((child) => (
         <li key={child.path} className="border-b border-line">
-          <Link to="/" search={{ view: 'folder', folder: child.path, layout }} className={row}>
+          <FolderLink folder={child.path} layout={layout} className={row}>
             <FolderIcon className="size-5 shrink-0 text-ink" />
             <span className="min-w-0 flex-1 truncate font-display font-bold text-ink">{child.name}</span>
             <span className="text-xs text-ink-3">{count(child.files)}</span>
-          </Link>
+          </FolderLink>
         </li>
       ))}
       {files.map((file) => (
         <li key={file.id} className="border-b border-line">
-          <Link to="/" search={{ path: file.path }} className={row}>
+          <Link to="/" search={{ path: file.path }} className={row} {...dragProps({ kind: 'file', id: file.id, path: file.path })}>
             <FileIcon className="size-5 shrink-0 text-ink-2" />
             <span className="min-w-0 flex-1 truncate font-display font-bold text-ink">{nameOf(file)}</span>
             <CategoryBadge id={file.category_id} />
@@ -223,5 +224,21 @@ function List({ folders: children, files, layout }: ContentsProps) {
         </li>
       ))}
     </ul>
+  )
+}
+
+/** A folder in the list: opens its page, can be dragged, and takes drops into itself. */
+function FolderLink({ folder, layout, className, children }: { folder: string; layout: Layout; className: string; children: ReactNode }) {
+  const drop = useDropTarget(folder)
+  return (
+    <Link
+      to="/"
+      search={{ view: 'folder', folder, layout }}
+      className={`${className} ${drop.over ? 'border-ink bg-pressed' : ''}`}
+      {...dragProps({ kind: 'folder', path: folder })}
+      {...drop.props}
+    >
+      {children}
+    </Link>
   )
 }

@@ -5,6 +5,7 @@ import type { ModulePage } from '#/lib/module'
 import type { Place } from '#/lib/place'
 import { FileIcon, FolderIcon, SearchIcon, TagIcon } from './Icons'
 import { Logo } from './Logo'
+import { type Dragged, dragProps, useDropTarget } from './Move'
 import { NewFile, NewFolder } from './NewFile'
 import { ThemeToggle } from './Theme'
 
@@ -50,6 +51,7 @@ interface Props {
 
 export function Sidebar({ entries, folders, place, pages }: Props) {
   const tree = useMemo(() => treeOf(entries, folders), [entries, folders])
+  const root = useDropTarget('/')
   const [creating, setCreating] = useState<'file' | 'folder' | null>(null)
   // New things go where you are: the open folder, or the folder of the open file.
   const here = place.folder ?? (place.path ? place.path.slice(0, place.path.lastIndexOf('/') + 1) : '/')
@@ -93,7 +95,12 @@ export function Sidebar({ entries, folders, place, pages }: Props) {
           ))}
         </nav>
       )}
-      <nav className="min-h-0 flex-1 overflow-y-auto border-t border-line px-2 py-2" aria-label="Files">
+      {/* Dropping on the explorer outside any folder moves to the root. */}
+      <nav
+        className={`min-h-0 flex-1 overflow-y-auto border-t border-line px-2 py-2 ${root.over ? 'bg-pressed' : ''}`}
+        aria-label="Files"
+        {...root.props}
+      >
         {entries.length === 0 && folders.length === 0 ? (
           <p className="px-2 py-1 text-sm text-ink-3">No files yet.</p>
         ) : (
@@ -121,7 +128,13 @@ function FolderItems({ folder, depth, open, openFolder }: ItemsProps) {
       ))}
       {folder.files.map((file) => (
         <li key={file.id}>
-          <Row search={{ path: file.path }} active={open === file.path} depth={depth} icon={<FileIcon />}>
+          <Row
+            search={{ path: file.path }}
+            active={open === file.path}
+            depth={depth}
+            icon={<FileIcon />}
+            drag={{ kind: 'file', id: file.id, path: file.path }}
+          >
             {file.path.slice(file.path.lastIndexOf('/') + 1)}
           </Row>
         </li>
@@ -137,12 +150,15 @@ function FolderItems({ folder, depth, open, openFolder }: ItemsProps) {
 function FolderItem({ folder, depth, open, openFolder }: ItemsProps) {
   const [expanded, setExpanded] = useState(() => (!open && !openFolder) || !!(open ?? openFolder)?.startsWith(folder.path))
   const [creating, setCreating] = useState(false)
+  const drop = useDropTarget(folder.path)
   const active = openFolder === folder.path
   return (
     <li>
       <div
-        className={`group flex items-center rounded-md text-sm font-medium text-ink ${active ? 'bg-pressed' : 'hover:bg-hover'}`}
+        className={`group flex items-center rounded-md text-sm font-medium text-ink ${drop.over ? 'bg-pressed ring-2 ring-ink' : active ? 'bg-pressed' : 'hover:bg-hover'}`}
         style={{ paddingLeft: `${4 + depth * 14}px` }}
+        {...dragProps({ kind: 'folder', path: folder.path })}
+        {...drop.props}
       >
         <button
           type="button"
@@ -188,11 +204,13 @@ interface RowProps {
   active: boolean
   depth: number
   icon?: ReactNode
+  /** What dragging the row moves, if it can be moved. */
+  drag?: Dragged
   children: string
 }
 
 /** A row of the explorer: a file, or one of the views at the top. */
-function Row({ search, active, depth, icon, children }: RowProps) {
+function Row({ search, active, depth, icon, drag, children }: RowProps) {
   return (
     <Link
       to="/"
@@ -201,6 +219,7 @@ function Row({ search, active, depth, icon, children }: RowProps) {
       className={`flex items-center gap-1.5 rounded-md py-1 pr-2 text-sm ${active ? 'bg-pressed font-medium text-ink' : 'text-ink-2 hover:bg-hover hover:text-ink'}`}
       style={{ paddingLeft: `${8 + depth * 14 + (depth > 0 || search.path ? 18 : 0)}px` }}
       aria-current={active ? 'page' : undefined}
+      {...(drag ? dragProps(drag) : {})}
     >
       {icon && <span className="shrink-0 text-ink-3">{icon}</span>}
       <span className="truncate">{children}</span>

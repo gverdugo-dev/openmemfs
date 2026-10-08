@@ -27,6 +27,9 @@ extended by modules.
 - **Rename and move**: edit the name at the top of the page; a name starting with `/` moves the file.
 - **New file and New folder**: buttons in the sidebar and on every folder page. You type a name;
   the file or folder goes where you are. A folder can be empty, and an empty folder can be deleted.
+- **Drag and drop**: drag a file or a folder onto another folder, in the sidebar, on a folder page
+  or onto a step of the path at the top, to move it. Dropping on the empty part of the sidebar moves
+  it to the root.
 - **Light and dark**: follows your system until you pick one with the button in the sidebar.
 - **Tags**: on a file or on a folder (every file below carries a folder's tags when you filter).
 - **Categories and subcategories**: one per file, managed on the Tags & categories page.

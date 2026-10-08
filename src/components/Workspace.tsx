@@ -4,9 +4,8 @@ import { filesQuery, foldersQuery } from '#/lib/queries'
 import type { Place } from '#/lib/place'
 import { FilePage } from './FilePage'
 import { FolderPage } from './FolderPage'
-import { Mark } from './Logo'
+import { MoveNotice } from './Move'
 import { Organize } from './Organize'
-import { Page } from './Page'
 import { Search } from './Search'
 import { Sidebar } from './Sidebar'
 
@@ -32,24 +31,14 @@ export function Workspace({ place }: { place: Place }) {
           <Search place={place} />
         ) : place.view === 'organize' ? (
           <Organize />
-        ) : place.view === 'folder' && place.folder ? (
-          <FolderPage key={place.folder} folder={place.folder} layout={place.layout} />
         ) : place.path ? (
           <FilePage path={place.path} tab={place.tab} tabs={tabs} />
         ) : (
-          <Page>
-            <Mark className="mb-6 size-16" />
-            <h1 className="text-4xl md:text-5xl">
-              Your <span className="marker">memory</span>, in files.
-            </h1>
-            <p className="mt-4 max-w-xl text-lg text-ink-2">
-              {entries.length === 0
-                ? 'Nothing here yet. Create a file, or let an agent write one through the API.'
-                : `${entries.length} ${entries.length === 1 ? 'file' : 'files'}. Pick one on the left.`}
-            </p>
-          </Page>
+          // The home is the root folder: its folders and files, and the buttons to add more.
+          <FolderPage key={place.folder ?? '/'} folder={place.folder ?? '/'} layout={place.layout} />
         )}
       </main>
+      <MoveNotice />
     </div>
   )
 }

@@ -122,6 +122,13 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories }: 
     { path: z.string() },
     async (i) => ({ path: await folders.create(i.path) }),
   )
+  tool(
+    mcp,
+    'move_folder',
+    'Move or rename a folder with everything in it, like /notes/old/ to /archive/old/. The destination must be free.',
+    { from: z.string(), to: z.string() },
+    async (i) => ({ path: await files.moveFolder(i.from, i.to, agent) }),
+  )
   tool(mcp, 'delete_folder', 'Delete an empty folder. A folder with files keeps them: delete or move them first.', { path: z.string() }, (i) =>
     folders.remove(i.path),
   )

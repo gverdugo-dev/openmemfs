@@ -36,10 +36,12 @@ export function NewFile({ folder, onClose }: Props) {
   )
 }
 
-/** Asks for the name of a new folder and opens it, empty. */
+/**
+ * Asks for the name of a new folder and stays where you are, so several folders can be made
+ * side by side; the new one shows up in the explorer and in the folder you are looking at.
+ */
 export function NewFolder({ folder, onClose }: Props) {
   const queryClient = useQueryClient()
-  const navigate = useNavigate()
   return (
     <NameForm
       kind="folder"
@@ -47,9 +49,8 @@ export function NewFolder({ folder, onClose }: Props) {
       initial="New folder"
       onClose={onClose}
       create={async (name) => {
-        const { path } = await folders.create(`${pathOf(folder, name.replace(/\/+$/, ''))}/`)
-        void queryClient.invalidateQueries({ queryKey: ['files'] })
-        void navigate({ to: '/', search: { view: 'folder', folder: path } })
+        await folders.create(`${pathOf(folder, name.replace(/\/+$/, ''))}/`)
+        await queryClient.invalidateQueries({ queryKey: ['files'] })
       }}
     />
   )

@@ -158,6 +158,7 @@ POST   /api/files/:id/tags                        tag_file        { tag }
 DELETE /api/files/:id/tags/:tag                   untag_file
 GET    /api/folders                               list_folders    (empty ones included)
 POST   /api/folders                               create_folder   { path }
+POST   /api/folders/move                          move_folder     { from, to } (with everything in it)
 DELETE /api/folders?path=/a/                      delete_folder   (only when empty)
 GET    /api/folders/tags?folder=/a/               (read_file shows folder_tags)
 POST   /api/folders/tags                          tag_folder      { folder, tag }

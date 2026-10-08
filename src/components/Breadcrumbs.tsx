@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import { Fragment } from 'react'
+import { Fragment, type ReactNode } from 'react'
+import { useDropTarget } from './Move'
 
 /**
  * A folder path where every step is a link: "/" opens the root, "work/" opens /work/, and so
@@ -7,23 +8,38 @@ import { Fragment } from 'react'
  */
 export function Breadcrumbs({ folder, layout }: { folder: string; layout?: 'grid' | 'list' }) {
   const segments = folder.split('/').filter(Boolean)
-  const link = 'rounded px-0.5 hover:bg-hover hover:text-ink hover:underline'
   return (
     <nav className="flex flex-wrap items-center font-mono text-xs text-ink-3" aria-label="Folder path">
-      <Link to="/" search={{ view: 'folder', folder: '/', layout }} className={link} title="/">
+      <Step folder="/" layout={layout}>
         /
-      </Link>
+      </Step>
       {segments.map((segment, i) => {
         const path = `/${segments.slice(0, i + 1).join('/')}/`
         return (
           <Fragment key={path}>
-            <Link to="/" search={{ view: 'folder', folder: path, layout }} className={link} title={path}>
+            <Step folder={path} layout={layout}>
               {segment}
-            </Link>
+            </Step>
             <span aria-hidden="true">/</span>
           </Fragment>
         )
       })}
     </nav>
+  )
+}
+
+/** One step of the path: a link to its folder, and a place to drop a file or folder into it. */
+function Step({ folder, layout, children }: { folder: string; layout?: 'grid' | 'list'; children: ReactNode }) {
+  const drop = useDropTarget(folder)
+  return (
+    <Link
+      to="/"
+      search={{ view: 'folder', folder, layout }}
+      title={folder}
+      className={`rounded px-0.5 hover:bg-hover hover:text-ink hover:underline ${drop.over ? 'bg-pressed text-ink ring-2 ring-ink' : ''}`}
+      {...drop.props}
+    >
+      {children}
+    </Link>
   )
 }

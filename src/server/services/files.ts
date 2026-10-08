@@ -2,6 +2,7 @@ import type { Sql, Tx } from '../db'
 import { DomainError, invalid, notFound } from '../errors'
 import { checkPath } from '../paths'
 import { checkId, isUniqueViolation, likePattern } from './shared'
+import { checkFolder } from './tags'
 
 /** Who wrote: a person in the editor, or an agent (the API without the editor's header, or MCP). */
 export type Author = 'user' | 'agent'
@@ -226,6 +227,39 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
       }
       const content = current.content.replace(input.oldString, () => input.newString)
       return files.update(id, { content, ifRevision: current.revision }, write)
+    },
+
+    /**
+     * Moves a folder, with everything in it, to a new path: its files (each one a write, so
+     * the history sees it), its empty folders and its folder tags. Returns the new path.
+     */
+    async moveFolder(fromRaw: unknown, toRaw: unknown, write: Write): Promise<string> {
+      const from = checkFolder(fromRaw)
+      const to = checkFolder(toRaw)
+      if (from === to) return to
+      if (to.startsWith(from)) throw invalid(`${from} cannot move into itself`)
+      return sql
+        .begin(async (tx) => {
+          const [source] = await tx`
+            select 1 from files where starts_with(path, ${from})
+            union all select 1 from folders where starts_with(path, ${from}) limit 1`
+          if (!source) throw notFound(`no folder ${from}`)
+          const [taken] = await tx<{ path: string }[]>`
+            select path from files where starts_with(path, ${to}) or ${to} = path || '/' or starts_with(${to}, path || '/')
+            union all select path from folders where starts_with(path, ${to}) limit 1`
+          if (taken) throw new DomainError('conflict', `${to} is taken: ${taken.path} is already there`)
+          const moved = await tx<{ id: string }[]>`
+            update files set path = ${to} || substr(path, ${from.length + 1}), revision = revision + 1, updated_at = now()
+            where starts_with(path, ${from}) returning id`
+          await tx`update folders set path = ${to} || substr(path, ${from.length + 1}) where starts_with(path, ${from})`
+          await tx`update folder_tags set folder = ${to} || substr(folder, ${from.length + 1}) where starts_with(folder, ${from})`
+          for (const { id } of moved) await runHooks(tx, await one(tx, id), write)
+          return to
+        })
+        .catch((error) => {
+          if (isUniqueViolation(error)) throw new DomainError('conflict', `${to} is taken`)
+          throw error
+        })
     },
 
     /** Puts a file in a category or subcategory, or takes it out with null. Not a content write. */

@@ -88,6 +88,10 @@ export function coreRoutes(api: Api, { files, folders, tags, categories }: Servi
     const { path } = await body<{ path?: unknown }>(c.req.raw)
     return c.json({ path: await folders.create(path) }, 201)
   })
+  api.post('/folders/move', async (c) => {
+    const { from, to } = await body<{ from?: unknown; to?: unknown }>(c.req.raw)
+    return c.json({ path: await files.moveFolder(from, to, { author: c.get('author') }) })
+  })
   api.delete('/folders', async (c) => {
     await folders.remove(c.req.query('path') ?? '')
     return c.body(null, 204)
