@@ -4,9 +4,10 @@ import { type ReactNode, useMemo, useState } from 'react'
 import { type Entry, folders } from '#/lib/api'
 import { folderTagsQuery, foldersQuery, searchQuery } from '#/lib/queries'
 import { Breadcrumbs } from './Breadcrumbs'
+import { contextMenuProps, renameKeyProps } from './ContextMenu'
 import { CategoryBadge } from './Categories'
 import { FileIcon, FolderIcon, GridIcon, ListIcon } from './Icons'
-import { dragProps, useDropTarget } from './Move'
+import { type Dragged, dragProps, useDropTarget } from './Move'
 import { NewFile, NewFolder } from './NewFile'
 import { Page } from './Page'
 import { TagEditor, TagList } from './Tags'
@@ -184,7 +185,7 @@ function Grid({ folders: children, files, layout }: ContentsProps) {
       ))}
       {files.map((file) => (
         <li key={file.id}>
-          <Link to="/" search={{ path: file.path }} className={`${tile} h-full`} {...dragProps({ kind: 'file', id: file.id, path: file.path })}>
+          <Link to="/" search={{ path: file.path }} className={`${tile} h-full`} {...itemProps({ kind: 'file', id: file.id, path: file.path })}>
             <FileIcon className="size-7 text-ink-2" />
             <span className="truncate font-display font-bold text-ink" title={nameOf(file)}>
               {nameOf(file)}
@@ -215,7 +216,7 @@ function List({ folders: children, files, layout }: ContentsProps) {
       ))}
       {files.map((file) => (
         <li key={file.id} className="border-b border-line">
-          <Link to="/" search={{ path: file.path }} className={row} {...dragProps({ kind: 'file', id: file.id, path: file.path })}>
+          <Link to="/" search={{ path: file.path }} className={row} {...itemProps({ kind: 'file', id: file.id, path: file.path })}>
             <FileIcon className="size-5 shrink-0 text-ink-2" />
             <span className="min-w-0 flex-1 truncate font-display font-bold text-ink">{nameOf(file)}</span>
             <CategoryBadge id={file.category_id} />
@@ -235,10 +236,13 @@ function FolderLink({ folder, layout, className, children }: { folder: string; l
       to="/"
       search={{ view: 'folder', folder, layout }}
       className={`${className} ${drop.over ? 'border-ink bg-pressed' : ''}`}
-      {...dragProps({ kind: 'folder', path: folder })}
+      {...itemProps({ kind: 'folder', path: folder })}
       {...drop.props}
     >
       {children}
     </Link>
   )
 }
+
+/** A file or a folder on the page: it can be dragged, right-clicked, and renamed with F2. */
+const itemProps = (item: Dragged) => ({ ...dragProps(item), ...contextMenuProps(item), ...renameKeyProps(item) })

@@ -63,8 +63,9 @@ src/
     module.ts        the WebModule contract
   lib/place.ts       the workspace's query string (?path, ?view, ?layout, ?q, ?tag...) read once
   lib/colors.ts      the label palette, shared by the server (which checks it) and the interface
-  components/        Workspace, Sidebar (the explorer), FilePage, Search, FolderPage (blocks or
-                     list), Organize, and the pieces they share: FileList, NewFile, Tags (TagList,
+  components/        Workspace, Sidebar (the explorer; SidebarLayout makes it resizable and
+                     foldable), FilePage, Search, FolderPage (blocks or list), Organize,
+                     ContextMenu (right-click on a file or folder), and the pieces they share: FileList, NewFile, Tags (TagList,
                      TagEditor), Categories (CategoryBadge, CategorySelect), Color (Swatch,
                      ColorPicker), Icons, Logo (Mark, Logo)
   modules/
@@ -267,12 +268,20 @@ reading. The tokens live in `src/styles.css`; use them by name (`text-ink`, `bg-
 - The only colour is the label palette (`[data-color]` in `src/styles.css`, read with `chip-tone`,
   `chip-tone-muted` and `tone-dot`), and only on tags, categories and subcategories. Any other
   literal colour in a component is a defect.
-- The brand is the mark in `src/components/Logo.tsx` (a folder with a bookmark on a black tile)
-  and the wordmark with the marker under "mem". `public/favicon.svg` is the same drawing; the PNG
+- The brand is the mark in `src/components/Logo.tsx` (a folder with a bookmark on a black tile),
+  the wordmark with the marker under "mem", and the tagline under it, **own your context**
+  (`TAGLINE`, and in the website header). `public/favicon.svg` is the same drawing; the PNG
   icons in `public/` and `docs/logo.png` are rendered from it, so change them together.
 - No gradients, shadows or blur. Lines and white space do the work; a block in the folder view is
   a 2px line, never a filled card.
 - Every view of the main area sits in `Page` (`src/components/Page.tsx`).
+- **The sidebar** is dragged wider or narrower by its right edge (192 to 480 px, double-click
+  resets to 256) and folds away with its button or Cmd+\ (Ctrl+\); both are remembered in
+  `localStorage` (`sidebar-width`, `sidebar-collapsed`), read inside try/catch.
+- **Every file and folder row** (explorer and folder page) is draggable, opens the context menu
+  on right-click (or the context-menu key) and renames with F2: spread `contextMenuProps` and
+  `renameKeyProps` from `ContextMenu.tsx` next to `dragProps`. The menu's actions call the same
+  API as the rest of the interface; a new row kind gets the same three.
 - The interface is in English and has no i18n yet; copy lives in the component that shows it.
 
 ## Conventions

@@ -24,7 +24,7 @@ const guides = readGuides(
 const escape = (text: string) =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-const logo = `<span class="logo"><img src="{root}favicon.svg" alt="" width="28" height="28"><span>open<span class="marker">mem</span>fs</span></span>`
+const logo = `<span class="logo"><img src="{root}favicon.svg" alt="" width="36" height="36"><span class="logo-words"><span>open<span class="marker">mem</span>fs</span><span class="tagline">own your context</span></span></span>`
 
 /** The document every page shares. `root` is the relative way back to the site root. */
 function page({ title, description, root, body }: { title: string; description: string; root: string; body: string }) {

@@ -3,7 +3,8 @@ import { type ReactNode, useMemo, useState } from 'react'
 import type { Entry } from '#/lib/api'
 import type { ModulePage } from '#/lib/module'
 import type { Place } from '#/lib/place'
-import { BookIcon, FileIcon, FolderIcon, SearchIcon, TagIcon } from './Icons'
+import { contextMenuProps, renameKeyProps } from './ContextMenu'
+import { BookIcon, FileIcon, FolderIcon, PanelIcon, SearchIcon, TagIcon } from './Icons'
 import { Logo } from './Logo'
 import { type Dragged, dragProps, useDropTarget } from './Move'
 import { NewFile, NewFolder } from './NewFile'
@@ -47,9 +48,11 @@ interface Props {
   folders: string[]
   place: Place
   pages: ModulePage[]
+  /** Folds the sidebar away; the workspace shows a button to bring it back. */
+  onCollapse: () => void
 }
 
-export function Sidebar({ entries, folders, place, pages }: Props) {
+export function Sidebar({ entries, folders, place, pages, onCollapse }: Props) {
   const tree = useMemo(() => treeOf(entries, folders), [entries, folders])
   const root = useDropTarget('/')
   const [creating, setCreating] = useState<'file' | 'folder' | null>(null)
@@ -62,7 +65,18 @@ export function Sidebar({ entries, folders, place, pages }: Props) {
         <Link to="/" aria-label="openmemfs, home">
           <Logo className="text-lg" />
         </Link>
-        <ThemeToggle />
+        <div className="flex items-center">
+          <ThemeToggle />
+          <button
+            type="button"
+            onClick={onCollapse}
+            className="grid size-8 place-items-center rounded-md text-ink-2 hover:bg-hover hover:text-ink"
+            aria-label="Hide the sidebar"
+            title={'Hide the sidebar (Cmd+\\)'}
+          >
+            <PanelIcon className="size-[18px]" />
+          </button>
+        </div>
       </div>
       <div className="px-3 pb-3">
         <div className="grid grid-cols-2 gap-2">
@@ -161,6 +175,8 @@ function FolderItem({ folder, depth, open, openFolder }: ItemsProps) {
         className={`group flex items-center rounded-md text-sm font-medium text-ink ${drop.over ? 'bg-pressed ring-2 ring-ink' : active ? 'bg-pressed' : 'hover:bg-hover'}`}
         style={{ paddingLeft: `${4 + depth * 14}px` }}
         {...dragProps({ kind: 'folder', path: folder.path })}
+        {...contextMenuProps({ kind: 'folder', path: folder.path })}
+        {...renameKeyProps({ kind: 'folder', path: folder.path })}
         {...drop.props}
       >
         <button
@@ -222,7 +238,7 @@ function Row({ search, active, depth, icon, drag, children }: RowProps) {
       className={`flex items-center gap-1.5 rounded-md py-1 pr-2 text-sm ${active ? 'bg-pressed font-medium text-ink' : 'text-ink-2 hover:bg-hover hover:text-ink'}`}
       style={{ paddingLeft: `${8 + depth * 14 + (depth > 0 || search.path ? 18 : 0)}px` }}
       aria-current={active ? 'page' : undefined}
-      {...(drag ? dragProps(drag) : {})}
+      {...(drag ? { ...dragProps(drag), ...contextMenuProps(drag), ...renameKeyProps(drag) } : {})}
     >
       {icon && <span className="shrink-0 text-ink-3">{icon}</span>}
       <span className="truncate">{children}</span>

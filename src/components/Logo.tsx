@@ -12,13 +12,19 @@ export function Mark({ className = 'size-6' }: { className?: string }) {
   )
 }
 
-/** The mark and the name, with the marker swipe under "mem". */
+/** The words under the name: what openmemfs is for. */
+export const TAGLINE = 'own your context'
+
+/** The mark and the name, with the marker swipe under "mem" and the tagline below. */
 export function Logo({ className = '' }: { className?: string }) {
   return (
-    <span className={`inline-flex items-center gap-2 font-display font-extrabold tracking-tight text-ink ${className}`}>
-      <Mark className="size-[1.4em] shrink-0" />
-      <span>
-        open<span className="marker">mem</span>fs
+    <span className={`inline-flex items-center gap-[0.45em] font-display font-extrabold tracking-tight text-ink ${className}`}>
+      <Mark className="size-[1.9em] shrink-0" />
+      <span className="flex flex-col leading-none">
+        <span>
+          open<span className="marker">mem</span>fs
+        </span>
+        <span className="mt-[0.3em] text-[0.5em] font-bold uppercase tracking-[0.12em] text-ink-3">{TAGLINE}</span>
       </span>
     </span>
   )

@@ -78,3 +78,13 @@ export function BookIcon({ className = 'size-4' }: { className?: string }) {
     </svg>
   )
 }
+
+/** A panel with its left column: the button that folds and unfolds the sidebar. */
+export function PanelIcon({ className = 'size-4' }: { className?: string }) {
+  return (
+    <svg {...base} className={className}>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M9 3v18" />
+    </svg>
+  )
+}

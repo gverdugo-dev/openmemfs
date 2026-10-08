@@ -30,6 +30,11 @@ extended by modules.
 - **Drag and drop**: drag a file or a folder onto another folder, in the sidebar, on a folder page
   or onto a step of the path at the top, to move it. Dropping on the empty part of the sidebar moves
   it to the root.
+- **Right-click menu**: on any file or folder, in the explorer or on a folder page: open (also in
+  a new tab), rename (or F2), move, duplicate, copy the path or a link, new file or folder inside,
+  delete.
+- **A sidebar you can resize and fold**: drag its edge, double-click to reset, fold it with the
+  button or Cmd+\.
 - **Light and dark**: follows your system until you pick one with the button in the sidebar.
 - **Tags**: on a file or on a folder (every file below carries a folder's tags when you filter).
 - **Categories and subcategories**: one per file, managed on the Tags & categories page.

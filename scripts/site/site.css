@@ -41,6 +41,8 @@ a { color: var(--ink); }
 .top nav { display: flex; gap: 20px; }
 .top nav a { font-weight: 700; font-size: 15px; }
 .logo { display: inline-flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+.logo-words { display: flex; flex-direction: column; line-height: 1; }
+.logo .tagline { margin-top: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
 
 .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px 64px; }
 .hero { max-width: 760px; padding: 48px 0 32px; }

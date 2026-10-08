@@ -13,8 +13,8 @@ const DRAG_TYPE = 'application/x-openmemfs'
 
 export type Dragged = { kind: 'file'; id: string; path: string } | { kind: 'folder'; path: string }
 
-const nameOf = (item: Dragged) => item.path.split('/').filter(Boolean).at(-1) ?? ''
-const parentOf = (item: Dragged) => {
+export const nameOf = (item: Dragged) => item.path.split('/').filter(Boolean).at(-1) ?? ''
+export const parentOf = (item: Dragged) => {
   const trimmed = item.kind === 'folder' ? item.path.slice(0, -1) : item.path
   return trimmed.slice(0, trimmed.lastIndexOf('/') + 1)
 }
@@ -30,21 +30,27 @@ export function dragProps(item: Dragged) {
   }
 }
 
-/** Moves a file or a folder into a folder, and follows it when it was the one on screen. */
-function useMove() {
+/**
+ * Moves a file or a folder to a new path (a folder's ends with "/"), and follows it when it, or
+ * something inside it, was the one on screen. Says why at the bottom of the screen if it cannot.
+ */
+export function useRelocate() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const search = useRouterState({ select: (s) => s.location.search })
 
-  return async (item: Dragged, target: string) => {
-    if (parentOf(item) === target) return
-    if (item.kind === 'folder' && target.startsWith(item.path)) return notify(`A folder cannot go inside itself.`)
-    const to = `${target}${nameOf(item)}${item.kind === 'folder' ? '/' : ''}`
+  return async (item: Dragged, to: string): Promise<boolean> => {
+    if (to === item.path) return false
+    if (item.kind === 'folder' && to.startsWith(item.path)) {
+      notify('A folder cannot go inside itself.')
+      return false
+    }
     try {
       if (item.kind === 'file') await files.update(item.id, { path: to })
       else await folders.move(item.path, to)
     } catch (e) {
-      return notify((e as Error).message)
+      notify((e as Error).message)
+      return false
     }
     queryClient.removeQueries({ queryKey: ['file'] })
     await queryClient.invalidateQueries({ queryKey: ['files'] })
@@ -57,6 +63,16 @@ function useMove() {
     } else if (place.view === 'folder' && place.folder && under(place.folder)) {
       void navigate({ to: '/', search: { ...place, folder: to + place.folder.slice(item.path.length) } })
     }
+    return true
+  }
+}
+
+/** Moves a file or a folder into a folder, keeping its name. */
+function useMove() {
+  const relocate = useRelocate()
+  return (item: Dragged, target: string) => {
+    if (parentOf(item) === target) return
+    void relocate(item, `${target}${nameOf(item)}${item.kind === 'folder' ? '/' : ''}`)
   }
 }
 
@@ -83,16 +99,16 @@ export function useDropTarget(folder: string) {
         event.preventDefault()
         event.stopPropagation()
         setOver(false)
-        void move(JSON.parse(event.dataTransfer.getData(DRAG_TYPE)) as Dragged, folder)
+        move(JSON.parse(event.dataTransfer.getData(DRAG_TYPE)) as Dragged, folder)
       },
     },
   }
 }
 
-// A move that fails says why at the bottom of the screen, then goes away.
+// A short message at the bottom of the screen (a move that failed, a path copied), then it goes away.
 let notice = ''
 const listeners = new Set<() => void>()
-function notify(message: string) {
+export function notify(message: string) {
   notice = message
   for (const l of listeners) l()
   setTimeout(() => {
@@ -113,7 +129,7 @@ export function MoveNotice() {
   )
   if (!message) return null
   return (
-    <p role="alert" className="fixed bottom-4 left-1/2 z-50 max-w-md -translate-x-1/2 rounded-lg border-2 border-ink bg-paper px-4 py-3 text-sm text-ink">
+    <p role="status" className="fixed bottom-4 left-1/2 z-50 max-w-md -translate-x-1/2 rounded-lg border-2 border-ink bg-paper px-4 py-3 text-sm text-ink">
       {message}
     </p>
   )
