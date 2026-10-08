@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serverModules } from '#/modules/server'
 import { connect, type Sql } from './db'
@@ -36,7 +36,7 @@ export async function migrate(sql: Sql, modules: ServerModule[] = serverModules)
           if (!MIGRATION_FILE.test(file)) throw new Error(`${join(dir, file)}: name it NNNN_snake_case.sql`)
           const id = `${owner}/${file}`
           if (done.has(id)) continue
-          const text = await Bun.file(join(process.cwd(), dir, file)).text()
+          const text = await readFile(join(process.cwd(), dir, file), 'utf8')
           await conn.unsafe('begin')
           try {
             await conn.unsafe(text)

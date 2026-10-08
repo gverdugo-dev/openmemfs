@@ -8,5 +8,5 @@ import { defineConfig } from 'vite'
 // `bun .output/server/index.mjs` serves the pages and /api on $PORT.
 export default defineConfig({
   server: { host: '127.0.0.1', port: 3000 },
-  plugins: [nitro({ preset: 'bun' }), tailwindcss(), tanstackStart(), viteReact()],
+  plugins: [nitro({ preset: 'bun' }), tailwindcss(), tanstackStart({ serverFns: { disableCsrfMiddlewareWarning: true } }), viteReact()],
 })
