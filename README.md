@@ -7,7 +7,7 @@ Postgres, with a REST API your agents write through. Small, and extended by modu
 |---|---|
 | **What it is** | A self-hosted file memory: an editor for people, an API for agents |
 | **Status** | v0.1: editor, metadata, version history, modules |
-| **Stack** | Bun, Hono, Postgres, React, TipTap, Tailwind |
+| **Stack** | TanStack Start, React, TanStack Query, Hono, Postgres, TipTap, Tailwind, Bun |
 | **License** | MIT |
 
 ## What it does
@@ -20,7 +20,7 @@ Postgres, with a REST API your agents write through. Small, and extended by modu
   together fold into one version. Any version can be restored, and the restore is a version too.
 - **Rename and move**: edit the name at the top of the page; a name starting with `/` moves the file.
 - **Conflicts**: if an agent changes a file you have open, nothing is overwritten; you choose.
-- **Modules**: new tabs, pages, routes and tables live in `modules/`, each in its own folder.
+- **Modules**: new tabs, pages, routes and tables live in `src/modules/`, each in its own folder.
 
 ## Run it
 
@@ -33,7 +33,7 @@ OPENMEMFS_TOKEN=$(openssl rand -hex 32) docker compose up
 Open http://localhost:8080 and type the token.
 
 Anywhere else, build the `Dockerfile` and give it two variables: `DATABASE_URL` (any Postgres 13+)
-and `OPENMEMFS_TOKEN` (at least 16 characters). Migrations run on start. See `.env.example` for
+and `OPENMEMFS_TOKEN` (at least 16 characters). Migrations run on the first request. See `.env.example` for
 the rest.
 
 Locally, with Bun and a Postgres:
@@ -41,7 +41,7 @@ Locally, with Bun and a Postgres:
 ```bash
 cp .env.example .env   # fill DATABASE_URL and OPENMEMFS_TOKEN
 bun install
-bun run dev            # http://localhost:5173
+bun run dev            # http://localhost:3000
 ```
 
 ## Let an agent write
@@ -57,10 +57,11 @@ The whole API, the auth model and how to write a module are in [CLAUDE.md](CLAUD
 ## Structure
 
 ```
-server/      the core: files, auth, migrations, the HTTP app
-migrations/  the core tables
-modules/     content, metadata, history, and yours
-web/         the editor shell
+src/routes/   the pages (sign-in, the workspace) and /api
+src/server/   the core: files, auth, migrations, the HTTP API
+src/modules/  content, metadata, history, and yours
+src/components/ the editor shell
+migrations/   the core tables
 ```
 
 ## License
