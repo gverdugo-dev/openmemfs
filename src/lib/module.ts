@@ -20,12 +20,12 @@ export interface TabProps {
   replace: (file: FileData) => void
 }
 
-/** A tab on the page of a file, next to Content, Metadata and History. */
+/** A tab on the page of a file, next to Content and History. */
 export interface FileTab {
   /** Unique; it goes in the URL as `?tab=`. */
   id: string
   label: string
-  /** Tabs are sorted by it. Content is 10, Metadata 20, History 30. */
+  /** Tabs are sorted by it. Content is 10, History 30. */
   order: number
   /** Show the tab only for the files this returns true for, e.g. `metadata.category === 'linkedin'`. */
   when?: (file: FileData) => boolean

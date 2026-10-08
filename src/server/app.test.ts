@@ -229,6 +229,24 @@ describe.skipIf(!url)('the API', () => {
     expect((await call('PATCH', `/categories/${work.body.id}`, { color: 'nope' })).status).toBe(400)
   })
 
+  test('a commit names the latest version, and the next save starts a new one', async () => {
+    const file = await json(await call('POST', '/files', { path: '/c.md', content: 'one' }))
+    const id = file.body.id
+    expect((await call('POST', `/files/${id}/commit`, { message: '  ' })).status).toBe(400)
+    const committed = await json(await call('POST', `/files/${id}/commit`, { message: 'First draft' }))
+    expect(committed.status).toBe(201)
+    expect(committed.body).toMatchObject({ version: 1, message: 'First draft' })
+    expect((await call('POST', `/files/${id}/commit`, { message: 'Again' })).status).toBe(400)
+
+    await call('PATCH', `/files/${id}`, { content: 'two' })
+    const versions = (await json(await call('GET', `/files/${id}/versions`))).body
+    expect(versions.map((v: { version: number; message: string | null }) => [v.version, v.message])).toEqual([
+      [2, null],
+      [1, 'First draft'],
+    ])
+    expect((await json(await call('GET', `/files/${id}/versions/1`))).body.content).toBe('one')
+  })
+
   test('edit replaces a piece that appears exactly once', async () => {
     const file = await json(await call('POST', '/files', { path: '/e.md', content: 'one two two' }))
     expect((await call('POST', `/files/${file.body.id}/edit`, { old_string: 'two', new_string: '2' })).status).toBe(400)
@@ -268,5 +286,7 @@ describe.skipIf(!url)('the API', () => {
 
     const versions = await callTool('list_versions', { path: '/mcp/note.md' })
     expect(versions.value).toMatchObject([{ version: 1, author: 'agent' }])
+    const commit = await callTool('commit_file', { path: '/mcp/note.md', message: 'From the agent' })
+    expect(commit.value).toMatchObject({ version: 1, message: 'From the agent' })
   })
 })

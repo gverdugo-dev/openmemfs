@@ -6,7 +6,7 @@ here exists so that two agents working on openmemfs end up writing it the same w
 ## What it is
 
 **openmemfs**: a memory made of files, for a person and their agents. A Notion-style editor over
-text files kept in Postgres, with three tabs on every file (Content, Metadata, History), tags on
+text files kept in Postgres, with two tabs on every file (Content, and History with its commits and changes), tags on
 files and folders, categories and subcategories, and search by name and content. Agents reach the
 same memory through a REST API and an MCP endpoint. It is small on purpose and grows by
 **modules**. Anyone deploys it anywhere: one container and one Postgres.
@@ -80,9 +80,9 @@ migrations/          core SQL migrations (NNNN_name.sql)
 regenerate it with `tsr generate`, which drops the Start registration. Import from `src` with
 `#/...` (`#/lib/api`, `#/server/errors`).
 
-Content, Metadata and History are modules like any other. Read them before writing a new one:
-`src/modules/content` is front only, `src/modules/metadata` is front only, `src/modules/history` has all three
-parts.
+Content and History are modules like any other. Read them before writing a new one:
+`src/modules/content` is front only, `src/modules/history` has all three parts. Metadata has no
+tab: it is for agents, through the API and the tools (the history shows how it changed).
 
 ## Commands
 
@@ -166,6 +166,7 @@ PATCH  /api/categories/:id                        update_category { name?, color
 DELETE /api/categories/:id                        delete_category
 GET    /api/files/:id/versions                    list_versions   (history module)
 GET    /api/files/:id/versions/:n                 read_version
+POST   /api/files/:id/commit                      commit_file     { message }
 POST   /api/files/:id/versions/:n/restore         restore_version { if_revision? }
 ```
 
@@ -197,7 +198,7 @@ the ones it needs.
    - Throw `invalid()` / `notFound()` from `#/server/errors`; never build an error response by hand.
    - Register it in `src/modules/server.ts`.
 2. **Front side**, `src/modules/<id>/web.tsx`, exporting a `WebModule` (see `src/lib/module.ts`):
-   - `tabs`: a tab on every file page, with `order` (Content 10, Metadata 20, History 30) and an
+   - `tabs`: a tab on every file page, with `order` (Content 10, History 30) and an
      optional `when(file)` to show it only for some files, for example
      `when: (f) => f.metadata.kind === 'linkedin-post'`.
    - `pages`: a page of its own, linked from the sidebar as `?page=<id>`.

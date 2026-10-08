@@ -9,7 +9,7 @@ extended by modules.
 | | |
 |---|---|
 | **What it is** | A self-hosted file memory: an editor for people, an API for agents |
-| **Status** | v0.1: editor, metadata, version history, tags, categories, search, REST and MCP, modules |
+| **Status** | v0.1: editor, version history with optional commits, tags, categories, search, REST and MCP, modules |
 | **Stack** | TanStack Start, React, TanStack Query, Hono, Postgres, TipTap, Tailwind, Bun |
 | **Repo** | `gverdugo-dev/openmemfs`, public, MIT |
 | **Part of** | `personal-public-resources`, the container of Gonzalo Verdugo's personal resources |
@@ -18,10 +18,12 @@ extended by modules.
 
 - **Content**: every file opens in a Notion-like editor that reads and writes Markdown. It saves as
   you type.
+- **History**: every change leaves a version, with who made it (you or an agent), and shows what
+  changed line by line. Saves close together fold into one version. Committing is optional: it
+  names a version with a message, and the history can show only the commits. Any version can be
+  restored, and the restore is a version too.
 - **Metadata**: a JSON object per file, where an agent writes notes for itself (state, summary,
-  links) without touching the content.
-- **History**: every change leaves a version, with who made it (you or an agent). Saves close
-  together fold into one version. Any version can be restored, and the restore is a version too.
+  links) through the API or MCP, without touching the content.
 - **Rename and move**: edit the name at the top of the page; a name starting with `/` moves the file.
 - **Tags**: on a file or on a folder (every file below carries a folder's tags when you filter).
 - **Categories and subcategories**: one per file, managed on the Tags & categories page.
@@ -70,15 +72,15 @@ claude mcp add --transport http openmemfs http://localhost:8080/mcp
 ```
 
 The agent gets a tool for everything the interface does: list and search files, read, create,
-edit, move and delete them, tag files and folders, manage tags and categories, and read or restore
-versions.
+edit, move and delete them, tag files and folders, manage tags and categories, commit, and read or
+restore versions.
 
 ## Structure
 
 ```
 src/routes/   the workspace page, /api and /mcp
 src/server/   the core: services, migrations, the REST and MCP doors
-src/modules/  content, metadata, history, and yours
+src/modules/  content, history, and yours
 src/components/ the editor shell
 migrations/   the core tables: files, categories, tags
 ```
