@@ -113,14 +113,18 @@ function FolderItems({ folder, depth, open, openFolder }: ItemsProps) {
   )
 }
 
-/** A folder: the chevron opens and closes it, the name opens its page (tags, files). */
+/**
+ * A folder: the chevron opens and closes it, the name opens its page (tags, files), and the +
+ * that shows on hover creates a file inside it.
+ */
 function FolderItem({ folder, depth, open, openFolder }: ItemsProps) {
   const [expanded, setExpanded] = useState(() => (!open && !openFolder) || !!(open ?? openFolder)?.startsWith(folder.path))
+  const [creating, setCreating] = useState(false)
   const active = openFolder === folder.path
   return (
     <li>
       <div
-        className={`flex items-center rounded-md text-sm font-medium text-black ${active ? 'bg-pressed' : 'hover:bg-hover'}`}
+        className={`group flex items-center rounded-md text-sm font-medium text-black ${active ? 'bg-pressed' : 'hover:bg-hover'}`}
         style={{ paddingLeft: `${4 + depth * 14}px` }}
       >
         <button
@@ -140,7 +144,21 @@ function FolderItem({ folder, depth, open, openFolder }: ItemsProps) {
         >
           {folder.name}
         </Link>
+        <button
+          type="button"
+          className="mr-1 rounded px-1.5 text-base leading-6 text-ink-3 opacity-0 group-hover:opacity-100 hover:bg-pressed hover:text-black focus-visible:opacity-100 max-md:opacity-100"
+          aria-label={`New file in ${folder.name}`}
+          title={`New file in ${folder.path}`}
+          onClick={() => setCreating(true)}
+        >
+          +
+        </button>
       </div>
+      {creating && (
+        <div style={{ paddingLeft: `${4 + depth * 14}px` }}>
+          <NewFile folder={folder.path} onClose={() => setCreating(false)} />
+        </div>
+      )}
       {expanded && <FolderItems folder={folder} depth={depth + 1} open={open} openFolder={openFolder} />}
     </li>
   )
