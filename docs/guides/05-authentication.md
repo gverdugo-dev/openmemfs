@@ -59,8 +59,11 @@ to the memory on your own machine. It does not stop anyone who reaches the serve
 
 ## More than a password
 
-For a sign-in with Google, per-agent keys or OAuth (which claude.ai connectors need), add an auth
-library as a module and check the session in the same middleware. Keep it about you and your
+For a sign-in with Google, per-agent keys or OAuth (which claude.ai connectors need), write a
+module with a `middleware`: it runs before every `/api` and `/mcp` request, answers 401 to
+whoever has no session, and can name the author in the history (`c.set('author', email)`) and
+narrow the folders a person reaches (`c.set('reach', ['/shared/'])`). Its sign-in callbacks go in
+`openRoutes`, and its `Wrap` puts a sign-in page in front of the workspace. Keep it about you and your
 agents: openmemfs is personal software, not a service for many users.
 
 Next: [Deploy it](06-deploy.md).

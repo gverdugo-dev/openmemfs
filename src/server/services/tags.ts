@@ -1,7 +1,8 @@
 import { type Sql, type Tables, tablesOf, type Tx } from '../db'
 import { DomainError, invalid, notFound } from '../errors'
+import { checkReach } from '../caller'
 import { checkPath } from '../paths'
-import { type Color, checkColor, checkId, checkName, colorFor, isUniqueViolation } from './shared'
+import { type Color, checkColor, checkId, checkName, colorFor, isUniqueViolation, reachable } from './shared'
 
 export interface Tag {
   id: string
@@ -26,7 +27,7 @@ export function createTags(sql: Sql, tb: Tables = tablesOf(sql)) {
       return sql<Tag[]>`
         select t.id, t.name, t.color,
           (select count(*)::int from ${tb.file_tags} ft join ${tb.files} f on f.id = ft.file_id
-            where ft.tag_id = t.id and f.deleted_at is null) as files,
+            where ft.tag_id = t.id and f.deleted_at is null and ${reachable(sql, sql`f.path`)}) as files,
           coalesce((select array_agg(dt.folder order by dt.folder) from ${tb.folder_tags} dt where dt.tag_id = t.id), '{}') as folders
         from ${tb.tags} t order by lower(t.name)`
     },
@@ -71,7 +72,7 @@ export function createTags(sql: Sql, tb: Tables = tablesOf(sql)) {
       checkId(fileId, 'file')
       await sql.begin(async (tx) => {
         const tagId = await ensure(tb, tx, name)
-        const [file] = await tx`select 1 from ${tb.files} where id = ${fileId} and deleted_at is null`
+        const [file] = await tx`select 1 from ${tb.files} where id = ${fileId} and deleted_at is null and ${reachable(tx, tx`path`)}`
         if (!file) throw notFound(`no file with id ${fileId}`)
         await tx`insert into ${tb.file_tags} (file_id, tag_id) values (${fileId}, ${tagId}) on conflict do nothing`
       })
@@ -81,6 +82,7 @@ export function createTags(sql: Sql, tb: Tables = tablesOf(sql)) {
       checkId(fileId, 'file')
       await sql`
         delete from ${tb.file_tags} where file_id = ${fileId}
+          and file_id in (select id from ${tb.files} where ${reachable(sql, sql`path`)})
           and tag_id = (select id from ${tb.tags} where lower(name) = lower(${name.trim()}))`
     },
 
@@ -93,7 +95,7 @@ export function createTags(sql: Sql, tb: Tables = tablesOf(sql)) {
     },
 
     async tagFolder(folder: string, name: string): Promise<string[]> {
-      const checked = checkFolder(folder)
+      const checked = checkReach(checkFolder(folder))
       await sql.begin(async (tx) => {
         const [inside] = await tx`
           select 1 from ${tb.files} where deleted_at is null and starts_with(path, ${checked})
@@ -106,7 +108,7 @@ export function createTags(sql: Sql, tb: Tables = tablesOf(sql)) {
     },
 
     async untagFolder(folder: string, name: string): Promise<string[]> {
-      const checked = checkFolder(folder)
+      const checked = checkReach(checkFolder(folder))
       await sql`
         delete from ${tb.folder_tags} where folder = ${checked}
           and tag_id = (select id from ${tb.tags} where lower(name) = lower(${name.trim()}))`

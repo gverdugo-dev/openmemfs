@@ -3,6 +3,7 @@ import postgres from 'postgres'
 import { serverModules } from '#/modules/server'
 import { createApp } from './app'
 import type { Config } from './config'
+import type { ServerModule } from './module'
 import { connect, type Sql } from './db'
 import { migrate } from './migrate'
 
@@ -435,5 +436,84 @@ describe.skipIf(!url)('the API', () => {
     expect((await json(await call('DELETE', `/trash/${other.id}`))).body).toEqual({ deleted: 1 })
     expect((await json(await call('DELETE', '/trash'))).body).toEqual({ deleted: 1 })
     expect((await json(await call('GET', '/trash'))).body).toEqual([])
+  })
+
+  test('a module closes the memory, names the author and narrows the reach', async () => {
+    const gate: ServerModule = {
+      id: 'gate',
+      setup: () => ({
+        openRoutes: (root) => root.post('/api/gate/callback', (c) => c.text('open')),
+        middleware: async (c, next) => {
+          const who = c.req.header('x-who')
+          if (!who) return c.json({ error: 'sign in' }, 401)
+          c.set('author', who)
+          if (who !== 'owner@example.com') c.set('reach', ['/shared/'])
+          return next()
+        },
+        contentLimit: (file) => (file.metadata.big === true ? 2 * 1024 * 1024 : undefined),
+      }),
+    }
+    const closed = createApp(sql, config(0), [...serverModules, gate])
+    const as = (who: string | null, method: string, path: string, body?: unknown) =>
+      closed.request(`http://localhost${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...(who ? { 'x-who': who } : {}) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    const owner = 'owner@example.com'
+    const guest = 'guest@example.com'
+
+    expect((await as(null, 'GET', '/api/files')).status).toBe(401)
+    expect((await as(null, 'POST', '/mcp', {})).status).toBe(401)
+    expect(await (await closed.request('http://localhost/api/gate/callback', { method: 'POST', body: 'a=1' })).text()).toBe('open')
+    expect((await as(null, 'GET', '/api/health')).status).toBe(200)
+
+    const secret = (await (await as(owner, 'POST', '/api/files', { path: '/private/s.md', content: 'secret' })).json()) as any
+    const shared = (await (await as(owner, 'POST', '/api/files', { path: '/shared/a.md', content: 'hi' })).json()) as any
+
+    // The guest sees only its folder; outside it a file answers as if it did not exist.
+    const listed = (await (await as(guest, 'GET', '/api/files')).json()) as { path: string }[]
+    expect(listed.map((e) => e.path)).toEqual(['/shared/a.md'])
+    expect((await as(guest, 'GET', `/api/files/${secret.id}`)).status).toBe(404)
+    expect((await as(guest, 'GET', '/api/files/by-path?path=/private/s.md')).status).toBe(404)
+    expect((await as(guest, 'PATCH', `/api/files/${secret.id}`, { content: 'x' })).status).toBe(404)
+    expect((await as(guest, 'DELETE', `/api/files/${secret.id}`)).status).toBe(404)
+    expect((await as(guest, 'POST', '/api/files', { path: '/private/new.md' })).status).toBe(404)
+    expect((await as(guest, 'PATCH', `/api/files/${shared.id}`, { path: '/private/moved.md' })).status).toBe(404)
+    expect((await as(guest, 'POST', '/api/folders/move', { from: '/private/', to: '/shared/p/' })).status).toBe(404)
+    const clash = (await (await as(guest, 'POST', '/api/files', { path: '/private' })).json()) as any
+    expect(clash.error).not.toContain('/private/s.md')
+    expect((await (await as(guest, 'GET', '/api/folders')).json()) as string[]).toEqual(['/shared/'])
+    const rules = (await (await as(guest, 'GET', '/api/organisation')).json()) as any
+    expect(rules.path).toBe('/organisation.md')
+
+    const mcpAs = async (who: string, name: string, args: unknown) => {
+      const res = await closed.request('http://localhost/mcp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'x-who': who },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
+      })
+      const { result } = (await res.json()) as any
+      return { error: result.isError === true, text: result.content[0].text as string }
+    }
+    const viaMcp = JSON.parse((await mcpAs(guest, 'list_files', {})).text) as { path: string }[]
+    expect(viaMcp.map((e) => e.path)).toEqual(['/shared/a.md'])
+    expect((await mcpAs(guest, 'read_file', { path: '/private/s.md' })).error).toBe(true)
+    await mcpAs(guest, 'create_file', { path: '/shared/agent.md', content: 'by mcp' })
+    const byAgent = JSON.parse((await mcpAs(owner, 'list_versions', { path: '/shared/agent.md' })).text) as any[]
+    expect(byAgent[0].author).toBe(guest)
+
+    // Its writes carry its name into the history, through both doors.
+    await as(guest, 'PATCH', `/api/files/${shared.id}`, { content: 'hello' })
+    const versions = (await (await as(owner, 'GET', `/api/files/${shared.id}/versions`)).json()) as any[]
+    expect(versions[0].author).toBe(guest)
+
+    // A module can grant some files more room than the core's 1 MiB.
+    const big = 'x'.repeat(1024 * 1024 + 10)
+    expect((await as(owner, 'POST', '/api/files', { path: '/shared/b.md', content: big })).status).toBe(400)
+    expect((await as(owner, 'POST', '/api/files', { path: '/shared/b.md', content: big, metadata: { big: true } })).status).toBe(201)
+
+    const listing = (await (await as(owner, 'GET', '/api/files?prefix=/shared/&metadata=true')).json()) as any[]
+    expect(listing.find((e) => e.path === '/shared/b.md').metadata).toEqual({ big: true })
   })
 })

@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Workspace } from '#/components/Workspace'
 import { placeOf } from '#/lib/place'
+import { webModules } from '#/modules/web'
 
 /**
  * The workspace. Where it is (the open file and its tab, a folder, a search, a module page) lives in the query
@@ -11,6 +12,8 @@ export const Route = createFileRoute('/')({
   validateSearch: placeOf,
   ssr: false,
   component: function Index() {
-    return <Workspace place={Route.useSearch()} />
+    let page = <Workspace place={Route.useSearch()} />
+    for (const { Wrap } of [...webModules].reverse()) if (Wrap) page = <Wrap>{page}</Wrap>
+    return page
   },
 })

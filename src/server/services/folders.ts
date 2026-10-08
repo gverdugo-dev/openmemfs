@@ -1,6 +1,7 @@
 import { DomainError, notFound } from '../errors'
 import { type Sql, type Tables, tablesOf } from '../db'
-import { lockStructure } from './shared'
+import { caller, checkReach, reaches } from '../caller'
+import { lockStructure, reachable } from './shared'
 import { checkFolder } from './tags'
 
 /**
@@ -13,11 +14,13 @@ export function createFolders(sql: Sql, tb: Tables = tablesOf(sql)) {
     /** Every folder, with its trailing slash, sorted. */
     async list(): Promise<string[]> {
       const rows = await sql<{ path: string }[]>`
-        select path from ${tb.folders}
+        select path from ${tb.folders} where ${reachable(sql, sql`path`)}
         union
-        select left(path, length(path) - position('/' in reverse(path)) + 1) from ${tb.files} where deleted_at is null`
+        select left(path, length(path) - position('/' in reverse(path)) + 1) from ${tb.files}
+        where deleted_at is null and ${reachable(sql, sql`path`)}`
       const all = new Set<string>()
-      for (const { path } of rows) {
+      // The folders a caller reaches are there even with nothing in them yet, with the way to them.
+      for (const path of [...rows.map((r) => r.path), ...(caller().reach ?? [])]) {
         const segments = path.slice(1, -1).split('/').filter(Boolean)
         for (let i = 1; i <= segments.length; i++) all.add(`/${segments.slice(0, i).join('/')}/`)
       }
@@ -26,12 +29,13 @@ export function createFolders(sql: Sql, tb: Tables = tablesOf(sql)) {
 
     /** Creates an empty folder. Its parent folders need no creating. */
     async create(raw: unknown): Promise<string> {
-      const path = checkFolder(raw)
+      const path = checkReach(checkFolder(raw))
       return sql.begin(async (tx) => {
         await lockStructure(tx)
         const [file] = await tx<{ path: string }[]>`
           select path from ${tb.files}
           where deleted_at is null and (${path} = path || '/' or starts_with(${path}, path || '/')) limit 1`
+        if (file && !reaches(file.path)) throw new DomainError('conflict', `${path} is taken`)
         if (file) throw new DomainError('conflict', `${path} clashes with ${file.path}: a name cannot be a file and a folder`)
         const [exists] = await tx`
           select 1 from ${tb.folders} where path = ${path}
@@ -44,7 +48,7 @@ export function createFolders(sql: Sql, tb: Tables = tablesOf(sql)) {
 
     /** Deletes an empty folder (and the empty folders in it), with its tags. */
     async remove(raw: unknown): Promise<void> {
-      const path = checkFolder(raw)
+      const path = checkReach(checkFolder(raw))
       await sql.begin(async (tx) => {
         const [file] = await tx`select 1 from ${tb.files} where deleted_at is null and starts_with(path, ${path}) limit 1`
         if (file) throw new DomainError('conflict', `${path} has files: delete or move them first`)

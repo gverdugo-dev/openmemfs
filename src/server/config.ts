@@ -1,5 +1,5 @@
 import { DEFAULT_SCHEMA } from './db'
-import { LOOPBACK_HOSTS } from './guard'
+import { LOOPBACK_HOSTS, MAX_BODY_BYTES } from './guard'
 
 export interface Config {
   /** Postgres connection string. */
@@ -12,6 +12,8 @@ export interface Config {
   schema?: string
   /** The host names /api and /mcp answer to, or '*' for any. Loopback names by default. */
   allowedHosts?: string[] | '*'
+  /** The largest body /api and /mcp read. Raise it with a module that stores larger files. */
+  maxBodyBytes?: number
 }
 
 /** Reads the configuration from the environment and refuses to start without the essentials. */
@@ -24,6 +26,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     migrateOnStart: env.MIGRATE_ON_START !== 'false',
     allowedHosts: hosts(env.ALLOWED_HOSTS),
     schema: schemaName(env.DATABASE_SCHEMA),
+    maxBodyBytes: integer(env.MAX_BODY_BYTES, MAX_BODY_BYTES),
   }
 }
 

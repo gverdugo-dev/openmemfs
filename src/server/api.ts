@@ -18,6 +18,7 @@ export function coreRoutes(api: Api, { files, folders, tags, categories, organis
       in: c.req.query('in') as Search['in'],
       tags: c.req.queries('tag'),
       categoryId: c.req.query('category'),
+      withMetadata: c.req.query('metadata') === 'true',
     }
     return c.json(await files.search(search))
   })

@@ -1,3 +1,4 @@
+import { caller, runAs } from '../caller'
 import { type Files, ORGANISATION_PATH } from './files'
 import { ORGANISATION_TEMPLATE } from './organisation-template'
 
@@ -18,16 +19,21 @@ export interface Organisation {
  * writes it from the template, and `files` refuses to move or delete it.
  */
 export function createOrganisation(files: Files) {
+  async function read(): Promise<Organisation> {
+    const now = new Date().toISOString()
+    const found = await files.getByPath(ORGANISATION_PATH).catch(() => null)
+    if (found) return { path: found.path, content: found.content, revision: found.revision, now, seeded: false }
+    const file = await files
+      .create({ path: ORGANISATION_PATH, content: ORGANISATION_TEMPLATE.replace('{{now}}', now) }, { author: 'agent' })
+      // Two first readers at once: the other one wrote it.
+      .catch(() => files.getByPath(ORGANISATION_PATH))
+    return { path: file.path, content: file.content, revision: file.revision, now, seeded: true }
+  }
+
   const organisation = {
-    async get(): Promise<Organisation> {
-      const now = new Date().toISOString()
-      const found = await files.getByPath(ORGANISATION_PATH).catch(() => null)
-      if (found) return { path: found.path, content: found.content, revision: found.revision, now, seeded: false }
-      const file = await files
-        .create({ path: ORGANISATION_PATH, content: ORGANISATION_TEMPLATE.replace('{{now}}', now) }, { author: 'agent' })
-        // Two first readers at once: the other one wrote it.
-        .catch(() => files.getByPath(ORGANISATION_PATH))
-      return { path: file.path, content: file.content, revision: file.revision, now, seeded: true }
+    /** Everyone reads the rules, whatever folders they reach. */
+    get(): Promise<Organisation> {
+      return runAs({ ...caller(), reach: null }, read)
     },
   }
   return organisation

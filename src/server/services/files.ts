@@ -1,11 +1,15 @@
 import { type Sql, type Tables, tablesOf, type Tx } from '../db'
 import { DomainError, invalid, notFound } from '../errors'
 import { checkPath } from '../paths'
-import { checkId, dropOrphanFolderTags, isUniqueViolation, likePattern, lockStructure } from './shared'
+import { checkReach, reaches } from '../caller'
+import { checkId, dropOrphanFolderTags, isUniqueViolation, likePattern, lockStructure, reachable } from './shared'
 import { checkFolder } from './tags'
 
-/** Who wrote: a person in the editor, or an agent (the API without the editor's header, or MCP). */
-export type Author = 'user' | 'agent'
+/**
+ * Who wrote: 'user' (a person in the editor) or 'agent' (the API without the editor's header,
+ * or MCP), unless a module names the caller (see `caller.ts`).
+ */
+export type Author = string
 
 export type Metadata = Record<string, unknown>
 
@@ -45,6 +49,8 @@ export interface Entry {
   folder_tags: string[]
   /** Around the first match, when searching the content. */
   snippet?: string
+  /** Only when the search asks for it (`withMetadata`). */
+  metadata?: Metadata
 }
 
 /** A file in the trash. */
@@ -67,6 +73,8 @@ export interface Search {
   tags?: string[]
   /** Only files in this category, or in one of its subcategories. */
   categoryId?: string
+  /** Give each entry its metadata, so a listing can show what an agent noted without reading every file. */
+  withMetadata?: boolean
 }
 
 export interface CreateFile {
@@ -102,6 +110,18 @@ export interface Write {
 /** Runs inside the transaction of every create and update, with the file as written. */
 export type WriteHook = (tx: Tx, file: File, write: Write) => Promise<void>
 
+/**
+ * A larger content limit for some files, such as an image kept as a data URL. Returns the
+ * limit in bytes for this file, or undefined to leave it at MAX_CONTENT_BYTES.
+ */
+export type ContentLimit = (file: { path: string; metadata: Metadata }) => number | undefined
+
+/** What modules add to the file service. */
+export interface FileHooks {
+  afterWrite?: WriteHook[]
+  contentLimits?: ContentLimit[]
+}
+
 /** The rules of the memory: always there, at the root, under this name (see `organisation.ts`). */
 export const ORGANISATION_PATH = '/organisation.md'
 
@@ -117,9 +137,16 @@ export type Files = ReturnType<typeof createFiles>
  * tools, a module) calls it instead of writing SQL of its own. It is the only code that
  * writes the `files` table.
  */
-export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables = tablesOf(sql)) {
+export function createFiles(sql: Sql, hooks: FileHooks = {}, tb: Tables = tablesOf(sql)) {
   async function runHooks(tx: Tx, file: File, write: Write) {
-    for (const hook of afterWrite) await hook(tx, file, write)
+    for (const hook of hooks.afterWrite ?? []) await hook(tx, file, write)
+  }
+
+  /** The content limit of this file: the largest any module grants it, at least MAX_CONTENT_BYTES. */
+  function checkSize(file: { path: string; content: string; metadata: Metadata }) {
+    let limit = MAX_CONTENT_BYTES
+    for (const grant of hooks.contentLimits ?? []) limit = Math.max(limit, grant(file) ?? 0)
+    if (Buffer.byteLength(file.content) > limit) throw invalid(`content is larger than ${sizeName(limit)}`)
   }
 
   const files = {
@@ -142,12 +169,13 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
             select array_agg(distinct t.name) from ${tb.folder_tags} dt join ${tb.tags} t on t.id = dt.tag_id
             where starts_with(f.path, dt.folder)
           ), '{}') as folder_tags,
+          ${search.withMetadata ? sql`f.metadata` : sql`null`} as metadata,
           case when ${byContent} and f.content ilike ${pattern} then
             substr(f.content, greatest(strpos(lower(f.content), lower(${query})) - ${SNIPPET_BEFORE}, 1), ${SNIPPET_LENGTH})
           end as snippet
         from ${tb.files} f
         left join ${tb.categories} c on c.id = f.category_id
-        where f.deleted_at is null and starts_with(f.path, ${prefix})
+        where f.deleted_at is null and starts_with(f.path, ${prefix}) and ${reachable(sql, sql`f.path`)}
           and (${query}::text is null
             or (${byName} and regexp_replace(f.path, '^.*/', '') ilike ${pattern})
             or (${byContent} and f.content ilike ${pattern}))
@@ -169,7 +197,8 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
     },
 
     async getByPath(path: string): Promise<File> {
-      const [row] = await sql<{ id: string }[]>`select id from ${tb.files} where path = ${checkPath(path)} and deleted_at is null`
+      const [row] = await sql<{ id: string }[]>`select id from ${tb.files}
+        where path = ${checkPath(path)} and deleted_at is null and ${reachable(sql, sql`path`)}`
       if (!row) throw notFound(`no file ${path}`)
       return one(tb, sql, row.id)
     },
@@ -182,9 +211,10 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
     },
 
     async create(input: CreateFile, write: Write): Promise<File> {
-      const path = checkPath(input.path)
+      const path = checkReach(checkPath(input.path))
       const content = checkContent(input.content ?? '')
       const metadata = checkMetadata(input.metadata ?? {})
+      checkSize({ path, content, metadata })
       return sql.begin(async (tx) => {
         await lockStructure(tx)
         await checkNoClash(tb, tx, path, null)
@@ -202,7 +232,7 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
 
     async update(id: string, input: UpdateFile, write: Write): Promise<File> {
       checkId(id, 'file')
-      const path = input.path === undefined ? undefined : checkPath(input.path)
+      const path = input.path === undefined ? undefined : checkReach(checkPath(input.path))
       const content = input.content === undefined ? undefined : checkContent(input.content)
       const metadata = input.metadata === undefined ? undefined : checkMetadata(input.metadata)
       checkRevision(input.ifRevision)
@@ -212,6 +242,7 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
           if (current.path === ORGANISATION_PATH && path !== undefined && path !== current.path)
             throw invalid(`${ORGANISATION_PATH} cannot be moved or renamed: every agent looks for it there`)
           const moved = path !== undefined && path !== current.path
+          checkSize({ path: path ?? current.path, content: content ?? current.content, metadata: metadata ?? current.metadata })
           if (moved) {
             await lockStructure(tx)
             await checkNoClash(tb, tx, path, id)
@@ -253,8 +284,8 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
      * the history sees it), its empty folders and its folder tags. Returns the new path.
      */
     async moveFolder(fromRaw: unknown, toRaw: unknown, write: Write): Promise<string> {
-      const from = checkFolder(fromRaw)
-      const to = checkFolder(toRaw)
+      const from = checkReach(checkFolder(fromRaw))
+      const to = checkReach(checkFolder(toRaw))
       if (from === to) return to
       if (to.startsWith(from)) throw invalid(`${from} cannot move into itself`)
       return sql
@@ -268,7 +299,7 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
             select path from ${tb.files}
             where deleted_at is null and (starts_with(path, ${to}) or ${to} = path || '/' or starts_with(${to}, path || '/'))
             union all select path from ${tb.folders} where starts_with(path, ${to}) limit 1`
-          if (taken) throw new DomainError('conflict', `${to} is taken: ${taken.path} is already there`)
+          if (taken) throw new DomainError('conflict', `${to} is taken${reaches(taken.path) ? `: ${taken.path} is already there` : ''}`)
           // Tags left behind by a folder that used to be at the destination would collide.
           await dropOrphanFolderTags(tb, tx)
           const moved = await tx<{ id: string; path: string }[]>`
@@ -294,7 +325,7 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
         const [found] = await sql`select 1 from ${tb.categories} where id = ${categoryId}`
         if (!found) throw notFound(`no category with id ${categoryId}`)
       }
-      const updated = await sql`update ${tb.files} set category_id = ${categoryId} where id = ${id} and deleted_at is null returning id`
+      const updated = await sql`update ${tb.files} set category_id = ${categoryId} where id = ${id} and deleted_at is null and ${reachable(sql, sql`path`)} returning id`
       if (updated.length === 0) throw notFound(`no file with id ${id}`)
       return one(tb, sql, id)
     },
@@ -304,7 +335,7 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
       checkId(id, 'file')
       await sql.begin(async (tx) => {
         const [current] = await tx<{ path: string }[]>`
-          select path from ${tb.files} where id = ${id} and deleted_at is null for update`
+          select path from ${tb.files} where id = ${id} and deleted_at is null and ${reachable(tx, tx`path`)} for update`
         if (!current) throw notFound(`no file with id ${id}`)
         if (current.path === ORGANISATION_PATH) throw invalid(`${ORGANISATION_PATH} cannot be deleted: edit it instead`)
         await tx`update ${tb.files} set deleted_at = now() where id = ${id}`
@@ -316,7 +347,7 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
     async trash(): Promise<Trashed[]> {
       return sql<Trashed[]>`
         select id, path, octet_length(content) as size, deleted_at from ${tb.files}
-        where deleted_at is not null order by deleted_at desc, path collate "C"`
+        where deleted_at is not null and ${reachable(sql, sql`path`)} order by deleted_at desc, path collate "C"`
     },
 
     /**
@@ -325,11 +356,11 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
      */
     async restore(id: string, input: { path?: unknown }, write: Write): Promise<File> {
       checkId(id, 'file')
-      const path = input.path === undefined || input.path === null ? undefined : checkPath(input.path)
+      const path = input.path === undefined || input.path === null ? undefined : checkReach(checkPath(input.path))
       return sql
         .begin(async (tx) => {
           const [trashed] = await tx<{ path: string }[]>`
-            select path from ${tb.files} where id = ${id} and deleted_at is not null for update`
+            select path from ${tb.files} where id = ${id} and deleted_at is not null and ${reachable(tx, tx`path`)} for update`
           if (!trashed) throw notFound(`no file with id ${id} in the trash`)
           const target = path ?? trashed.path
           await lockStructure(tx)
@@ -353,11 +384,12 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = [], tb: Tables =
     async emptyTrash(id?: string): Promise<{ deleted: number }> {
       if (id !== undefined) {
         checkId(id, 'file')
-        const gone = await sql`delete from ${tb.files} where id = ${id} and deleted_at is not null returning id`
+        const gone = await sql`
+          delete from ${tb.files} where id = ${id} and deleted_at is not null and ${reachable(sql, sql`path`)} returning id`
         if (gone.length === 0) throw notFound(`no file with id ${id} in the trash`)
         return { deleted: 1 }
       }
-      const gone = await sql`delete from ${tb.files} where deleted_at is not null returning id`
+      const gone = await sql`delete from ${tb.files} where deleted_at is not null and ${reachable(sql, sql`path`)} returning id`
       return { deleted: gone.length }
     },
   }
@@ -381,7 +413,7 @@ async function one(tb: Tables, sql: Sql | Tx, id: string): Promise<File> {
         from ${tb.folder_tags} dt join ${tb.tags} t on t.id = dt.tag_id
         where starts_with(f.path, dt.folder)
       ), '[]') as folder_tags
-    from ${tb.files} f where f.id = ${id} and f.deleted_at is null`
+    from ${tb.files} f where f.id = ${id} and f.deleted_at is null and ${reachable(sql, sql`f.path`)}`
   if (!file) throw notFound(`no file with id ${id}`)
   return file
 }
@@ -389,7 +421,8 @@ async function one(tb: Tables, sql: Sql | Tx, id: string): Promise<File> {
 /** Locks the row for a write and checks the revision the caller read. */
 async function lock(tb: Tables, tx: Tx, id: string, ifRevision: number | undefined) {
   const [current] = await tx<Pick<File, 'path' | 'content' | 'metadata' | 'revision'>[]>`
-    select path, content, metadata, revision from ${tb.files} where id = ${id} and deleted_at is null for update`
+    select path, content, metadata, revision from ${tb.files}
+    where id = ${id} and deleted_at is null and ${reachable(tx, tx`path`)} for update`
   if (!current) throw notFound(`no file with id ${id}`)
   if (ifRevision !== undefined && current.revision !== ifRevision) throw staleError(current, ifRevision)
   return current
@@ -415,8 +448,14 @@ async function checkNoClash(tb: Tables, tx: Tx, path: string, ownId: string | nu
     select path from ${tb.folders} where starts_with(path, ${path + '/'})
     limit 1`
   if (clash) {
+    if (!reaches(clash.path)) throw new DomainError('conflict', `${path} is taken`)
     throw new DomainError('conflict', `${path} clashes with ${clash.path}: a name cannot be a file and a folder`)
   }
+}
+
+/** "1 MiB", "30 MiB", "512 KiB". */
+function sizeName(bytes: number): string {
+  return bytes % (1024 * 1024) === 0 ? `${bytes / 1024 / 1024} MiB` : `${Math.round(bytes / 1024)} KiB`
 }
 
 function checkRevision(ifRevision: unknown) {
@@ -425,7 +464,6 @@ function checkRevision(ifRevision: unknown) {
 
 function checkContent(content: unknown): string {
   if (typeof content !== 'string') throw invalid('content must be a string')
-  if (Buffer.byteLength(content) > MAX_CONTENT_BYTES) throw invalid('content is larger than 1 MiB')
   if (content.includes('\u0000')) throw invalid('content has a NUL character')
   return content
 }

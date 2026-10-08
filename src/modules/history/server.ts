@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { invalid, notFound } from '#/server/errors'
 import { body } from '#/server/http'
-import { fileRef, tool } from '#/server/mcp'
+import { fileRef, tool, writer } from '#/server/mcp'
 import type { ServerModule } from '#/server/module'
 import type { Author, Metadata } from '#/server/services'
 
@@ -147,7 +147,7 @@ export const history: ServerModule = {
           'restore_version',
           'Write an old version back. The restore is a new version, so nothing is lost.',
           { ...fileRef, version: z.number().int(), if_revision: z.number().int().optional() },
-          async (i) => versions.restore((await files.find(i)).id, i.version, i.if_revision, 'agent'),
+          async (i) => versions.restore((await files.find(i)).id, i.version, i.if_revision, writer().author),
         )
       },
     }

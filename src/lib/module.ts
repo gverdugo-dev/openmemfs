@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import type { FileData, Metadata } from './api'
 
 export interface WritePatch {
@@ -44,4 +44,9 @@ export interface WebModule {
   id: string
   tabs?: FileTab[]
   pages?: ModulePage[]
+  /**
+   * Wraps the whole workspace, outermost first in the order of the registry: a sign-in gate,
+   * a provider, a banner. It renders its children when the workspace should show.
+   */
+  Wrap?: ComponentType<{ children: ReactNode }>
 }

@@ -1,6 +1,6 @@
 import { type Sql, type Tables, tablesOf } from '../db'
 import { DomainError, invalid, notFound } from '../errors'
-import { type Color, checkColor, checkId, checkName, colorFor, isUniqueViolation } from './shared'
+import { type Color, checkColor, checkId, checkName, colorFor, isUniqueViolation, reachable } from './shared'
 
 export interface Category {
   id: string
@@ -32,7 +32,7 @@ export function createCategories(sql: Sql, tb: Tables = tablesOf(sql)) {
     async list(): Promise<Category[]> {
       return sql<Category[]>`
         select c.id, c.name, c.color, c.parent_id,
-          (select count(*)::int from ${tb.files} f where f.category_id = c.id and f.deleted_at is null) as files
+          (select count(*)::int from ${tb.files} f where f.category_id = c.id and f.deleted_at is null and ${reachable(sql, sql`f.path`)}) as files
         from ${tb.categories} c
         left join ${tb.categories} p on p.id = c.parent_id
         order by lower(coalesce(p.name, c.name)), c.parent_id is not null, lower(c.name)`

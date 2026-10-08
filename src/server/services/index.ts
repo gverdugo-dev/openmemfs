@@ -1,6 +1,6 @@
 import { type Sql, type Tables, tablesOf } from '../db'
 import { createCategories } from './categories'
-import { createFiles, type WriteHook } from './files'
+import { createFiles, type FileHooks } from './files'
 import { createFolders } from './folders'
 import { createOrganisation } from './organisation'
 import { createTags } from './tags'
@@ -12,8 +12,8 @@ export type Services = ReturnType<typeof createServices>
  * (`api.ts`) and the MCP tools (`mcp.ts`), only translate a request into a call to one of
  * these and its answer back, so a person and an agent can do exactly the same things.
  */
-export function createServices(sql: Sql, afterWrite: WriteHook[] = [], tables: Tables = tablesOf(sql)) {
-  const files = createFiles(sql, afterWrite, tables)
+export function createServices(sql: Sql, hooks: FileHooks = {}, tables: Tables = tablesOf(sql)) {
+  const files = createFiles(sql, hooks, tables)
   return {
     files,
     organisation: createOrganisation(files),
@@ -23,7 +23,7 @@ export function createServices(sql: Sql, afterWrite: WriteHook[] = [], tables: T
   }
 }
 
-export type { Author, Entry, File, Metadata, Search, Trashed, Write, WriteHook } from './files'
+export type { Author, ContentLimit, Entry, File, FileHooks, Metadata, Search, Trashed, Write, WriteHook } from './files'
 export type { Category } from './categories'
 export type { Organisation } from './organisation'
 export type { Tag } from './tags'

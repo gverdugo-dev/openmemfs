@@ -1,6 +1,7 @@
-import type { Tables, Tx } from '../db'
+import type { Sql, Tables, Tx } from '../db'
 import { invalid, notFound } from '../errors'
 import { COLORS, type Color } from '#/lib/colors'
+import { caller } from '../caller'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -68,4 +69,14 @@ export async function dropOrphanFolderTags(tb: Tables, tx: Tx): Promise<void> {
     delete from ${tb.folder_tags} dt
     where not exists (select 1 from ${tb.files} where starts_with(path, dt.folder) and deleted_at is null)
       and not exists (select 1 from ${tb.folders} where starts_with(path, dt.folder))`
+}
+
+/**
+ * A condition true for the paths the current caller reaches, for a `where` clause:
+ * `reachable(sql, sql\`f.path\`)`. Always true when nothing narrows the reach.
+ */
+export function reachable(sql: Sql | Tx, column: ReturnType<Sql>) {
+  const { reach } = caller()
+  if (reach === null) return sql`true`
+  return sql`exists (select 1 from unnest(${reach}::text[]) as r(folder) where starts_with(${column}, r.folder))`
 }

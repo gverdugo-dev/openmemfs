@@ -168,14 +168,14 @@ it belongs in a module or in the deployment.
 
 - Who wrote is only a label for the history: the editor sends `X-Openmemfs: 1` on every call
   (`src/lib/api.ts`) and writes as `user`; everything else, the API without it and every MCP
-  tool, writes as `agent`.
+  tool, writes as `agent`. A module's middleware may name the author instead.
 - `docker-compose.yml` publishes the port on 127.0.0.1 only. Keep it so.
 
 ## The API and the MCP tools
 
 ```
 GET    /api/organisation                          get_organisation (written from the template if missing)
-GET    /api/files?prefix&q&in&tag&tag&category   list_files      (no content; snippet on hits)
+GET    /api/files?prefix&q&in&tag&tag&category&metadata=true   list_files      (no content; snippet on hits)
 GET    /api/files/by-path?path=/a.md              read_file
 GET    /api/files/:id                             read_file
 POST   /api/files                                 create_file     { path, content?, metadata? }
@@ -231,6 +231,16 @@ the ones it needs.
      them with the module id or hang them under `/files/:id/<id>`), `tools(mcp)` to add MCP tools
      with `tool()` from `#/server/mcp`, and `afterWrite(tx, file, write)` to react to every file
      write inside its transaction.
+   - Access control is a module, never the core: its `middleware` runs before every `/api` and
+     `/mcp` request (after the guard) and may answer 401, name the author
+     (`c.set('author', email)`) or narrow the folders the request reaches
+     (`c.set('reach', ['/work/acme/'])`). The services read both through `caller()`
+     (`src/server/caller.ts`): every query on `files` filters with `reachable()` and every path
+     a write names goes through `checkReach()`; a new query must too. Outside the reach a file
+     answers as if it did not exist; `/organisation.md` is read by everyone. `openRoutes(app)`
+     mounts what must come before the guard and the middleware (a sign-in callback, OAuth), and
+     nothing protects it. Tools write as `writer()`, never as a literal author.
+   - `contentLimit(file)` grants some files more than 1 MiB (raise `MAX_BODY_BYTES` with it).
    - Put its operations in one object (its service) and call it from both its routes and its
      tools, as `src/modules/history/server.ts` does. Every route has a tool twin.
    - It reads and writes files through `ctx.services.files`, never with its own SQL on `files`. Its own
@@ -243,6 +253,7 @@ the ones it needs.
      optional `when(file)` to show it only for some files, for example
      `when: (f) => f.metadata.kind === 'linkedin-post'`.
    - `pages`: a page of its own, linked from the sidebar as `?page=<id>`.
+   - `Wrap`: a component around the whole workspace (a sign-in gate, a provider).
    - A tab writes with the `write` it receives, never with `fetch`: `write` queues writes, sends
      `if_revision` and shows conflicts. Use `replace` to put a file from the server on screen.
    - It reads with `useQuery`; key its queries by file id and revision so they follow every write.

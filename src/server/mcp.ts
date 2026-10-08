@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
+import { caller } from './caller'
 import { DomainError } from './errors'
 import type { Services } from './services'
 import { COLORS } from './services/shared'
@@ -73,9 +74,13 @@ const color = z.enum(COLORS).optional().describe('a colour for the interface; on
 
 const ifRevision = z.number().int().optional().describe('write only if the file is still at this revision')
 
-/** The core tools: the twin of every route in `api.ts`. Agents always write as `agent`. */
+/** Who a tool writes as: `agent`, unless a module's middleware named the caller. */
+export function writer() {
+  return { author: caller().author }
+}
+
+/** The core tools: the twin of every route in `api.ts`. */
 export function coreTools(mcp: McpServer, { files, folders, tags, categories, organisation }: Services) {
-  const agent = { author: 'agent' as const }
 
   tool(
     mcp,
@@ -94,8 +99,17 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
       in: z.enum(['name', 'content', 'all']).optional().describe('where to find it; both by default'),
       tags: z.array(z.string()).optional().describe('tag names the file must all carry'),
       category_id: z.string().optional().describe('a category or subcategory id, from list_categories'),
+      with_metadata: z.boolean().optional().describe('give each file its metadata too'),
     },
-    (i) => files.search({ prefix: i.folder, query: i.query, in: i.in, tags: i.tags, categoryId: i.category_id }),
+    (i) =>
+      files.search({
+        prefix: i.folder,
+        query: i.query,
+        in: i.in,
+        tags: i.tags,
+        categoryId: i.category_id,
+        withMetadata: i.with_metadata,
+      }),
   )
   tool(mcp, 'read_file', 'Read a file: content, metadata, revision, category and tags.', fileRef, (i) => files.find(i))
   tool(
@@ -107,7 +121,7 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
       content: z.string().optional(),
       metadata: z.record(z.string(), z.unknown()).optional().describe('a JSON object for your own notes'),
     },
-    (i) => files.create(i, agent),
+    (i) => files.create(i, writer()),
   )
   tool(
     mcp,
@@ -125,7 +139,7 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
       return files.update(
         file.id,
         { path: i.new_path, content: i.content, metadata: i.metadata, ifRevision: i.if_revision },
-        agent,
+        writer(),
       )
     },
   )
@@ -136,7 +150,7 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
     { ...fileRef, old_string: z.string(), new_string: z.string(), if_revision: ifRevision },
     async (i) => {
       const file = await files.find(i)
-      return files.edit(file.id, { oldString: i.old_string, newString: i.new_string, ifRevision: i.if_revision }, agent)
+      return files.edit(file.id, { oldString: i.old_string, newString: i.new_string, ifRevision: i.if_revision }, writer())
     },
   )
   tool(mcp, 'delete_file', 'Move a file to the trash. It keeps its history and tags, and restore_file brings it back.', fileRef, async (i) => {
@@ -148,7 +162,7 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
     'restore_file',
     'Take a file out of the trash, by its id from list_trash, back to its path or to a new one when that path is taken.',
     { id: z.string(), path: z.string().optional().describe('restore it here instead of its old path') },
-    (i) => files.restore(i.id, { path: i.path }, agent),
+    (i) => files.restore(i.id, { path: i.path }, writer()),
   )
   tool(
     mcp,
@@ -171,7 +185,7 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
     'move_folder',
     'Move or rename a folder with everything in it, like /notes/old/ to /archive/old/. The destination must be free.',
     { from: z.string(), to: z.string() },
-    async (i) => ({ path: await files.moveFolder(i.from, i.to, agent) }),
+    async (i) => ({ path: await files.moveFolder(i.from, i.to, writer()) }),
   )
   tool(mcp, 'delete_folder', 'Delete an empty folder. A folder with files keeps them: delete or move them first.', { path: z.string() }, (i) =>
     folders.remove(i.path),
