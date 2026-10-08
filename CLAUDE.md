@@ -297,8 +297,3 @@ reading. The tokens live in `src/styles.css`; use them by name (`text-ink`, `bg-
 - The core never learns about a module: if the core needs a branch for one module, the contract is
   missing something; extend the contract.
 - No secrets in the repo: `.env` is ignored, `.env.example` documents every variable.
-
-## Agent skills
-
-Issues live in the tracker described in `docs/agents/issue-tracker.md` (label `resource:openmemfs`);
-triage labels in `docs/agents/triage-labels.md`; domain docs in `docs/agents/domain.md`.
