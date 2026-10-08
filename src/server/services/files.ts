@@ -1,7 +1,7 @@
 import type { Sql, Tx } from '../db'
 import { DomainError, invalid, notFound } from '../errors'
 import { checkPath } from '../paths'
-import { checkId, isUniqueViolation, likePattern } from './shared'
+import { checkId, dropOrphanFolderTags, isUniqueViolation, likePattern, lockStructure } from './shared'
 import { checkFolder } from './tags'
 
 /** Who wrote: a person in the editor, or an agent (the API without the editor's header, or MCP). */
@@ -178,6 +178,7 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
       const content = checkContent(input.content ?? '')
       const metadata = checkMetadata(input.metadata ?? {})
       return sql.begin(async (tx) => {
+        await lockStructure(tx)
         await checkNoClash(tx, path, null)
         const [row] = await tx<{ id: string }[]>`
           insert into files (path, content, metadata)
@@ -202,7 +203,11 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
           const current = await lock(tx, id, input.ifRevision)
           if (current.path === ORGANISATION_PATH && path !== undefined && path !== current.path)
             throw invalid(`${ORGANISATION_PATH} cannot be moved or renamed: every agent looks for it there`)
-          if (path !== undefined && path !== current.path) await checkNoClash(tx, path, id)
+          const moved = path !== undefined && path !== current.path
+          if (moved) {
+            await lockStructure(tx)
+            await checkNoClash(tx, path, id)
+          }
           await tx`
             update files set
               path = ${path ?? current.path},
@@ -211,6 +216,7 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
               revision = revision + 1,
               updated_at = now()
             where id = ${id}`
+          if (moved) await dropOrphanFolderTags(tx)
           const file = await one(tx, id)
           await runHooks(tx, file, { ...write, checkpoint: write.checkpoint || input.checkpoint })
           return file
@@ -245,6 +251,7 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
       if (to.startsWith(from)) throw invalid(`${from} cannot move into itself`)
       return sql
         .begin(async (tx) => {
+          await lockStructure(tx)
           const [source] = await tx`
             select 1 from files where starts_with(path, ${from})
             union all select 1 from folders where starts_with(path, ${from}) limit 1`
@@ -253,9 +260,12 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
             select path from files where starts_with(path, ${to}) or ${to} = path || '/' or starts_with(${to}, path || '/')
             union all select path from folders where starts_with(path, ${to}) limit 1`
           if (taken) throw new DomainError('conflict', `${to} is taken: ${taken.path} is already there`)
-          const moved = await tx<{ id: string }[]>`
+          // Tags left behind by a folder that used to be at the destination would collide.
+          await dropOrphanFolderTags(tx)
+          const moved = await tx<{ id: string; path: string }[]>`
             update files set path = ${to} || substr(path, ${from.length + 1}), revision = revision + 1, updated_at = now()
-            where starts_with(path, ${from}) returning id`
+            where starts_with(path, ${from}) returning id, path`
+          for (const file of moved) checkPath(file.path)
           await tx`update folders set path = ${to} || substr(path, ${from.length + 1}) where starts_with(path, ${from})`
           await tx`update folder_tags set folder = ${to} || substr(folder, ${from.length + 1}) where starts_with(folder, ${from})`
           for (const { id } of moved) await runHooks(tx, await one(tx, id), write)
@@ -281,12 +291,14 @@ export function createFiles(sql: Sql, afterWrite: WriteHook[] = []) {
     },
 
     async remove(id: string): Promise<void> {
-      const deleted = await sql`delete from files where id = ${checkId(id, 'file')} and path <> ${ORGANISATION_PATH} returning id`
-      if (deleted.length === 0) {
-        const [kept] = await sql`select 1 from files where id = ${id}`
-        if (kept) throw invalid(`${ORGANISATION_PATH} cannot be deleted: edit it instead`)
-      }
-      if (deleted.length === 0) throw notFound(`no file with id ${id}`)
+      checkId(id, 'file')
+      await sql.begin(async (tx) => {
+        const [current] = await tx<{ path: string }[]>`select path from files where id = ${id} for update`
+        if (!current) throw notFound(`no file with id ${id}`)
+        if (current.path === ORGANISATION_PATH) throw invalid(`${ORGANISATION_PATH} cannot be deleted: edit it instead`)
+        await tx`delete from files where id = ${id}`
+        await dropOrphanFolderTags(tx)
+      })
     },
   }
   return files
@@ -362,7 +374,13 @@ function checkMetadata(metadata: unknown): Metadata {
   if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
     throw invalid('metadata must be a JSON object')
   }
-  if (Buffer.byteLength(JSON.stringify(metadata)) > MAX_METADATA_BYTES) {
+  const text = JSON.stringify(metadata)
+  // Postgres jsonb refuses these; say so instead of failing inside the database.
+  if (text.includes('\\u0000')) throw invalid('metadata has a NUL character')
+  if (/\\ud[89ab][0-9a-f]{2}(?!\\ud[c-f])|(?<!\\ud[89ab][0-9a-f]{2})\\ud[c-f][0-9a-f]{2}/i.test(text)) {
+    throw invalid('metadata has an unpaired surrogate')
+  }
+  if (Buffer.byteLength(text) > MAX_METADATA_BYTES) {
     throw invalid('metadata is larger than 64 KiB')
   }
   return metadata as Metadata

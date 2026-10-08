@@ -1,3 +1,5 @@
+import { LOOPBACK_HOSTS } from './guard'
+
 export interface Config {
   /** Postgres connection string. */
   databaseUrl: string
@@ -5,6 +7,8 @@ export interface Config {
   versionWindowSeconds: number
   /** Whether the server applies pending migrations when it starts. */
   migrateOnStart: boolean
+  /** The host names /api and /mcp answer to, or '*' for any. Loopback names by default. */
+  allowedHosts?: string[] | '*'
 }
 
 /** Reads the configuration from the environment and refuses to start without the essentials. */
@@ -15,7 +19,15 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     databaseUrl,
     versionWindowSeconds: integer(env.VERSION_WINDOW_SECONDS, 300),
     migrateOnStart: env.MIGRATE_ON_START !== 'false',
+    allowedHosts: hosts(env.ALLOWED_HOSTS),
   }
+}
+
+/** A comma-separated list of host names, without ports; `*` for any. */
+function hosts(value: string | undefined): string[] | '*' {
+  if (value === undefined || value.trim() === '') return LOOPBACK_HOSTS
+  if (value.trim() === '*') return '*'
+  return [...LOOPBACK_HOSTS, ...value.split(',').map((h) => h.trim().toLowerCase()).filter(Boolean)]
 }
 
 function integer(value: string | undefined, fallback: number): number {

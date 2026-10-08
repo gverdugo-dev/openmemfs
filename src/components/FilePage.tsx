@@ -6,6 +6,7 @@ import type { FileTab, WritePatch } from '#/lib/module'
 import { fileQuery, filesQuery } from '#/lib/queries'
 import { Breadcrumbs } from './Breadcrumbs'
 import { CategorySelect } from './Categories'
+import { notify } from './Move'
 import { Page } from './Page'
 import { TagEditor } from './Tags'
 
@@ -136,7 +137,11 @@ export function FilePage({ path, tab, tabs }: Props) {
 
   async function remove() {
     if (!window.confirm(`Delete ${file!.path}? Its history goes with it.`)) return
-    await files.remove(file!.id)
+    try {
+      await files.remove(file!.id)
+    } catch (e) {
+      return notify((e as Error).message)
+    }
     void queryClient.invalidateQueries(filesQuery)
     void navigate({ to: '/', search: {} })
   }

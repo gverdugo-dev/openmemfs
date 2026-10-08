@@ -13,47 +13,47 @@ const LOCK_KEY = 4_206_573_353
 /**
  * Applies the pending migrations: first the core ones in `migrations/`, then each module's,
  * in the order of the registry. Each file runs once, in its own transaction, and is recorded
- * in `openmemfs_migrations` as `<owner>/<file>`. An advisory lock lets several instances
- * start at once. Returns the ids it applied.
+ * in `openmemfs_migrations` as `<owner>/<file>`. A transaction-scoped advisory lock lets
+ * several instances start at once, also behind a transaction pooler. Returns the ids it applied.
  */
 export async function migrate(sql: Sql, modules: ServerModule[] = serverModules): Promise<string[]> {
   const sources = [{ owner: 'core', dir: CORE_MIGRATIONS }]
   for (const module of modules) if (module.migrations) sources.push({ owner: module.id, dir: module.migrations })
 
   const applied: string[] = []
-  await sql.reserve().then(async (conn) => {
-    try {
-      await conn`select pg_advisory_lock(${LOCK_KEY})`
-      await conn`
-        create table if not exists openmemfs_migrations (
-          id text primary key,
-          applied_at timestamptz not null default now()
-        )`
-      const done = new Set((await conn<{ id: string }[]>`select id from openmemfs_migrations`).map((r) => r.id))
-      for (const { owner, dir } of sources) {
-        const files = (await readdir(join(process.cwd(), dir))).filter((f) => f.endsWith('.sql')).sort()
-        for (const file of files) {
-          if (!MIGRATION_FILE.test(file)) throw new Error(`${join(dir, file)}: name it NNNN_snake_case.sql`)
-          const id = `${owner}/${file}`
-          if (done.has(id)) continue
-          const text = await readFile(join(process.cwd(), dir, file), 'utf8')
-          await conn.unsafe('begin')
-          try {
-            await conn.unsafe(text)
-            await conn`insert into openmemfs_migrations (id) values (${id})`
-            await conn.unsafe('commit')
-          } catch (error) {
-            await conn.unsafe('rollback')
-            throw new Error(`migration ${id} failed: ${(error as Error).message}`)
-          }
-          applied.push(id)
-        }
-      }
-    } finally {
-      await conn`select pg_advisory_unlock(${LOCK_KEY})`
-      conn.release()
-    }
+  // Under the lock too: two `create table if not exists` at once can still collide.
+  await sql.begin(async (tx) => {
+    await tx`select pg_advisory_xact_lock(${LOCK_KEY})`
+    await tx`
+      create table if not exists openmemfs_migrations (
+        id text primary key,
+        applied_at timestamptz not null default now()
+      )`
   })
+  for (const { owner, dir } of sources) {
+    const files = (await readdir(join(process.cwd(), dir))).filter((f) => f.endsWith('.sql')).sort()
+    for (const file of files) {
+      if (!MIGRATION_FILE.test(file)) throw new Error(`${join(dir, file)}: name it NNNN_snake_case.sql`)
+      const id = `${owner}/${file}`
+      const text = await readFile(join(process.cwd(), dir, file), 'utf8')
+      // A transaction lock holds behind a transaction pooler (Supabase, PgBouncer), where a
+      // session lock could be taken on one connection and released on another. Whoever waited
+      // looks again once it has the lock, and skips what the other instance applied.
+      const ran = await sql
+        .begin(async (tx) => {
+          await tx`select pg_advisory_xact_lock(${LOCK_KEY})`
+          const [done] = await tx`select 1 from openmemfs_migrations where id = ${id}`
+          if (done) return false
+          await tx.unsafe(text)
+          await tx`insert into openmemfs_migrations (id) values (${id})`
+          return true
+        })
+        .catch((error: Error) => {
+          throw new Error(`migration ${id} failed: ${error.message}`)
+        })
+      if (ran) applied.push(id)
+    }
+  }
   return applied
 }
 

@@ -38,11 +38,29 @@ export function tool<Shape extends z.ZodRawShape>(
       return { content: [{ type: 'text', text: JSON.stringify(result ?? { ok: true }, null, 2) }] }
     } catch (error) {
       if (error instanceof DomainError) return { isError: true, content: [{ type: 'text', text: error.message }] }
-      console.error(`mcp ${name}:`, error)
+      console.error(`mcp ${name}: ${describe(error)}`)
       return { isError: true, content: [{ type: 'text', text: 'internal error' }] }
     }
   }
-  mcp.registerTool(name, { description, inputSchema: shape }, handler as never)
+  mcp.registerTool(name, { description, inputSchema: shape, annotations: annotationsOf(name) }, handler as never)
+}
+
+/**
+ * What a client may assume about a tool, read from its name: `list_`, `read_` and `get_`
+ * only read; `delete_` and `untag_` remove something; the rest write without removing.
+ * A module tool that breaks the naming gets the cautious default (writes, may remove).
+ */
+function annotationsOf(name: string) {
+  if (/^(list|read|get)_/.test(name)) return { readOnlyHint: true, openWorldHint: false }
+  const removes = !/^(create|tag|commit)_/.test(name)
+  return { readOnlyHint: false, destructiveHint: removes, openWorldHint: false }
+}
+
+/** An error for the log: its class, its Postgres code if any, and its message. */
+export function describe(error: unknown): string {
+  if (!(error instanceof Error)) return String(error)
+  const code = (error as { code?: unknown }).code
+  return `${error.name}${typeof code === 'string' ? ` ${code}` : ''}: ${error.message}`
 }
 
 /** The file a tool acts on: by path (what agents usually know) or by id. */

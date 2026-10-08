@@ -1,3 +1,4 @@
+import type { Tx } from '../db'
 import { invalid, notFound } from '../errors'
 import { COLORS, type Color } from '#/lib/colors'
 
@@ -44,4 +45,27 @@ export function likePattern(text: string): string {
 
 export function isUniqueViolation(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
+}
+
+/** Any constant works; it only has to be the same in every process. */
+const STRUCTURE_LOCK = 4_206_573_354
+
+/**
+ * Serialises the writes that create, rename or move a name, so two of them cannot both pass
+ * the "a name cannot be a file and a folder" check. A transaction lock, so it holds behind a
+ * transaction pooler too.
+ */
+export async function lockStructure(tx: Tx): Promise<void> {
+  await tx`select pg_advisory_xact_lock(${STRUCTURE_LOCK})`
+}
+
+/**
+ * Drops the tags of folders that no longer exist: no file under them and no created folder.
+ * A folder that comes back later with the same path starts without tags.
+ */
+export async function dropOrphanFolderTags(tx: Tx): Promise<void> {
+  await tx`
+    delete from folder_tags dt
+    where not exists (select 1 from files where starts_with(path, dt.folder))
+      and not exists (select 1 from folders where starts_with(path, dt.folder))`
 }

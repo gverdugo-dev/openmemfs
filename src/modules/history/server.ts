@@ -67,9 +67,11 @@ export const history: ServerModule = {
         if (latest.message !== null) throw invalid(`nothing changed in ${file.path} since the last commit`)
         const [committed] = await sql<VersionEntry[]>`
           update file_versions set message = ${message}
-          where file_id = ${file.id} and version = ${latest.version}
+          where file_id = ${file.id} and version = ${latest.version} and message is null
           returning version, path, author, message, octet_length(content) as size, created_at, updated_at`
-        return committed!
+        // Someone else committed it in between.
+        if (!committed) throw invalid(`nothing changed in ${file.path} since the last commit`)
+        return committed
       },
 
       async restore(fileId: string, raw: unknown, ifRevision: number | undefined, author: Author) {

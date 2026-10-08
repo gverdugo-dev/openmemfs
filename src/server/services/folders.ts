@@ -1,5 +1,6 @@
 import { DomainError, notFound } from '../errors'
 import type { Sql } from '../db'
+import { lockStructure } from './shared'
 import { checkFolder } from './tags'
 
 /**
@@ -27,6 +28,7 @@ export function createFolders(sql: Sql) {
     async create(raw: unknown): Promise<string> {
       const path = checkFolder(raw)
       return sql.begin(async (tx) => {
+        await lockStructure(tx)
         const [file] = await tx<{ path: string }[]>`
           select path from files where ${path} = path || '/' or starts_with(${path}, path || '/') limit 1`
         if (file) throw new DomainError('conflict', `${path} clashes with ${file.path}: a name cannot be a file and a folder`)

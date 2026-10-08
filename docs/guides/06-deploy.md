@@ -23,11 +23,13 @@ printf '%s' 'a long password' | gcloud secrets create openmemfs-password --data-
 # Build from this folder and deploy.
 gcloud run deploy openmemfs --source . --region europe-west1 \
   --allow-unauthenticated \
+  --set-env-vars ALLOWED_HOSTS=memory.example.com \
   --set-secrets DATABASE_URL=openmemfs-database-url:latest,OPENMEMFS_PASSWORD=openmemfs-password:latest
 ```
 
 `--allow-unauthenticated` lets the internet reach the service; your password is what closes it.
-The compute service account needs the **Secret Manager Secret Accessor** role on both secrets.
+`ALLOWED_HOSTS` lists the names the server answers to (your domain, and the `run.app` address
+if you use it): `/api` and `/mcp` refuse any other. The compute service account needs the **Secret Manager Secret Accessor** role on both secrets.
 Migrations run on the first request.
 
 Cloud Run prints the address. Open it, then connect your agent to `<address>/mcp`
@@ -36,5 +38,6 @@ Cloud Run prints the address. Open it, then connect your agent to `<address>/mcp
 
 ## Elsewhere
 
-Fly.io, Railway, a VPS with Docker: build the `Dockerfile` and give it `DATABASE_URL`. Every
+Fly.io, Railway, a VPS with Docker: build the `Dockerfile` and give it `DATABASE_URL` and
+`ALLOWED_HOSTS`. Every
 variable it reads is in `.env.example`.

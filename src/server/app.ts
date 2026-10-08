@@ -5,18 +5,19 @@ import { coreRoutes } from './api'
 import type { Config } from './config'
 import type { Sql } from './db'
 import { DomainError, statusOf } from './errors'
-import { coreTools, createMcpHandler } from './mcp'
+import { LOOPBACK_HOSTS, requestGuard } from './guard'
+import { coreTools, createMcpHandler, describe } from './mcp'
 import type { Api, AppEnv, ServerModule } from './module'
 import { createServices, type WriteHook } from './services'
+
+/** The editor sends it on every call, so its writes are by `user`; everything else is by `agent`. */
+export const EDITOR_HEADER = 'X-Openmemfs'
 
 /**
  * Builds the server: the service layer, and its two doors on top, the REST API under /api
  * and the MCP endpoint at /mcp, each with the parts every module adds. TanStack Start hands
  * those paths here (src/routes/api/$.ts and src/routes/mcp.ts); the pages are its own.
  */
-/** The editor sends it on every call, so its writes are by `user`; everything else is by `agent`. */
-export const EDITOR_HEADER = 'X-Openmemfs'
-
 export function createApp(sql: Sql, config: Config, modules: ServerModule[] = serverModules) {
   const hooks: WriteHook[] = []
   const services = createServices(sql, hooks)
@@ -43,11 +44,15 @@ export function createApp(sql: Sql, config: Config, modules: ServerModule[] = se
   const app = new Hono<AppEnv>()
   app.onError((error, c) => {
     if (error instanceof DomainError) return c.json({ error: error.message, code: error.code }, statusOf(error.code))
-    console.error(`${c.req.method} ${c.req.path}:`, error)
+    // The path without its query, and the error without the values it may carry.
+    console.error(`${c.req.method} ${c.req.path}: ${describe(error)}`)
     return c.json({ error: 'internal error' }, 500)
   })
 
   app.get('/api/health', (c) => c.json({ ok: true }))
+  const guard = requestGuard(config.allowedHosts ?? LOOPBACK_HOSTS)
+  app.use('/api/*', guard)
+  app.use('/mcp', guard)
   app.route('/api', api)
   app.all('/api/*', (c) => c.json({ error: 'no such route' }, 404))
 

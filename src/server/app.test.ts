@@ -350,4 +350,34 @@ describe.skipIf(!url)('the API', () => {
     expect(deleted).toMatchObject({ status: 400, body: { code: 'invalid' } })
     expect((await call('GET', '/files/by-path?path=/organisation.md')).status).toBe(200)
   })
+
+  test('requests a browser page on another site could send are refused', async () => {
+    const page = (headers: Record<string, string>, url = 'http://localhost/api/files') =>
+      app.request(url, { method: 'POST', headers, body: JSON.stringify({ path: '/x.md' }) })
+    expect((await page({ 'Content-Type': 'application/json', Origin: 'https://evil.example' })).status).toBe(403)
+    expect((await page({ 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'cross-site' })).status).toBe(403)
+    expect((await page({ 'Content-Type': 'text/plain' })).status).toBe(415)
+    expect((await page({ 'Content-Type': 'application/json' }, 'http://rebound.example/api/files')).status).toBe(403)
+    expect((await page({ 'Content-Type': 'application/json' }, 'http://rebound.example/mcp')).status).toBe(403)
+    expect((await page({ 'Content-Type': 'application/json', Origin: 'http://localhost' })).status).toBe(201)
+
+    const open = createApp(sql, { ...config(300), allowedHosts: ['memory.example.com'] })
+    const res = await open.request('http://memory.example.com/api/files', { headers: { Origin: 'http://memory.example.com' } })
+    expect(res.status).toBe(200)
+  })
+
+  test('metadata Postgres would refuse is a 400, not a 500', async () => {
+    const res = await json(await call('POST', '/files', { path: '/m.md', metadata: { a: 'x\u0000y' } }))
+    expect(res).toMatchObject({ status: 400, body: { code: 'invalid' } })
+  })
+
+  test('deleting the last file of a folder drops the folder tags', async () => {
+    const file = (await json(await call('POST', '/files', { path: '/gone/a.md' }))).body
+    await call('POST', '/folders/tags', { folder: '/gone/', tag: 'old' })
+    await call('DELETE', `/files/${file.id}`)
+    expect((await sql`select 1 from folder_tags where folder = '/gone/'`).length).toBe(0)
+    await call('POST', '/files', { path: '/gone/b.md' })
+    const again = await json(await call('GET', '/folders/tags?folder=/gone/'))
+    expect(again.body).toEqual([])
+  })
 })
