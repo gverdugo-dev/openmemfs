@@ -1,0 +1,29 @@
+# Everything on one machine: Postgres and openmemfs. `docker compose up -d`, then open
+# http://localhost:8080 and sign in with OPENMEMFS_TOKEN from your .env.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: openmemfs
+      POSTGRES_PASSWORD: openmemfs
+      POSTGRES_DB: openmemfs
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U openmemfs']
+      interval: 2s
+      retries: 30
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://openmemfs:openmemfs@db:5432/openmemfs
+      OPENMEMFS_TOKEN: ${OPENMEMFS_TOKEN:?set OPENMEMFS_TOKEN in .env (openssl rand -hex 32)}
+    ports:
+      - '8080:8080'
+
+volumes:
+  db:

@@ -1,0 +1,322 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '@fontsource/poppins/400.css';
+@import '@fontsource/poppins/500.css';
+@import '@fontsource/poppins/600.css';
+
+/* Tailwind scans the modules too: their front sides live outside web/. */
+@source '../modules';
+
+/*
+ * The sketchbook of Widgetry and Modyard in black: white pages, a light grey sidebar, heavy
+ * black Inter headings, Poppins for reading, 2px black outlines. Where Widgetry uses butter
+ * yellow and Modyard light green, openmemfs uses black: the primary button, the active tab
+ * and the marker swipe. To give an install its own colour, change --marker and --on-marker.
+ */
+:root {
+  --background: #ffffff;
+  --foreground: #000000;
+  --body-ink: #353535;
+  --ink-2: rgb(0 0 0 / 72%);
+  --ink-3: rgb(0 0 0 / 62%);
+  --ink-4: rgb(0 0 0 / 48%);
+  --line: rgb(0 0 0 / 11%);
+  --line-strong: rgb(0 0 0 / 22%);
+  --wash: #f4f4f4;
+  --hover: rgb(0 0 0 / 5%);
+  --pressed: rgb(0 0 0 / 9%);
+
+  --marker: #000000;
+  --on-marker: #ffffff;
+  --marker-soft: rgb(0 0 0 / 14%);
+
+  --live: #1a7f4e;
+  --destructive: #c4321f;
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Inter Variable', 'Poppins', ui-sans-serif, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-body-ink: var(--body-ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-wash: var(--wash);
+  --color-hover: var(--hover);
+  --color-pressed: var(--pressed);
+  --color-marker: var(--marker);
+  --color-on-marker: var(--on-marker);
+  --color-marker-soft: var(--marker-soft);
+  --color-live: var(--live);
+  --color-destructive: var(--destructive);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--body-ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.65;
+    caret-color: #000;
+    scrollbar-color: rgb(0 0 0 / 28%) transparent;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: var(--foreground);
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.14;
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: var(--marker-soft);
+    color: #000;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--foreground);
+    outline-offset: 2px;
+  }
+}
+
+/* The marker swipe under key words, as in Widgetry and Modyard, here in soft black. */
+@utility marker {
+  background-image: linear-gradient(var(--marker-soft), var(--marker-soft));
+  background-repeat: no-repeat;
+  background-position: 0 88%;
+  background-size: 100% 0.38em;
+  padding-inline: 0.04em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* Buttons: 40px, uppercase Inter at 13px. Primary is black; outline has a 2px black border. */
+@utility btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  height: 2.5rem;
+  padding-inline: 1rem;
+  border: 2px solid #000;
+  border-radius: var(--radius);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 150ms,
+    color 150ms,
+    transform 150ms;
+
+  &:active {
+    transform: scale(0.98);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.45;
+  }
+}
+
+@utility btn-primary {
+  background: var(--marker);
+  color: var(--on-marker);
+
+  &:hover:not(:disabled) {
+    background: rgb(0 0 0 / 80%);
+  }
+}
+
+@utility btn-outline {
+  background: #fff;
+  color: #000;
+
+  &:hover:not(:disabled) {
+    background: var(--hover);
+  }
+}
+
+@utility btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-2);
+
+  &:hover:not(:disabled) {
+    background: var(--hover);
+    color: #000;
+  }
+}
+
+@utility field {
+  width: 100%;
+  border: 2px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: #fff;
+  color: #000;
+  padding: 0.5rem 0.75rem;
+  transition: border-color 150ms;
+
+  &:focus {
+    border-color: #000;
+    outline: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/*
+ * The document: what TipTap renders. Poppins at a comfortable measure, headings in the
+ * display face, code on the grey wash, quotes with a black rule.
+ */
+.prose-openmemfs {
+  color: var(--body-ink);
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+.prose-openmemfs:focus {
+  outline: none;
+}
+
+.prose-openmemfs > * + * {
+  margin-top: 0.9em;
+}
+
+.prose-openmemfs h1 {
+  margin-top: 1.6em;
+  font-size: 32px;
+}
+
+.prose-openmemfs h2 {
+  margin-top: 1.8em;
+  font-size: 26px;
+}
+
+.prose-openmemfs h3 {
+  margin-top: 1.5em;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.prose-openmemfs > :first-child {
+  margin-top: 0;
+}
+
+.prose-openmemfs a {
+  color: #000;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.prose-openmemfs strong {
+  color: #000;
+  font-weight: 600;
+}
+
+.prose-openmemfs ul,
+.prose-openmemfs ol {
+  padding-left: 1.3em;
+}
+
+.prose-openmemfs ul {
+  list-style: disc;
+}
+
+.prose-openmemfs ol {
+  list-style: decimal;
+}
+
+.prose-openmemfs li > p {
+  margin: 0;
+}
+
+.prose-openmemfs li + li {
+  margin-top: 0.3em;
+}
+
+.prose-openmemfs li::marker {
+  color: #000;
+  font-weight: 600;
+}
+
+.prose-openmemfs :not(pre) > code {
+  padding: 0.12em 0.38em;
+  border-radius: 6px;
+  background: var(--wash);
+  color: #000;
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+}
+
+.prose-openmemfs pre {
+  overflow-x: auto;
+  padding: 16px 18px;
+  border: 2px solid #000;
+  border-radius: 12px;
+  background: #fff;
+  color: #000;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.prose-openmemfs blockquote {
+  padding: 12px 18px;
+  border-left: 4px solid #000;
+  border-radius: 0 10px 10px 0;
+  background: var(--wash);
+}
+
+.prose-openmemfs hr {
+  margin: 2em 0;
+  border: 0;
+  border-top: 2px dashed var(--line-strong);
+}
+
+.prose-openmemfs p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--ink-4);
+  pointer-events: none;
+}
