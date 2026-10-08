@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/banner.jpg" alt="A Dutch canal warehouse with a stepped gable, seen from the front in flat vector" width="100%">
+</p>
+
 # openmemfs
 
 <p><img src="docs/logo.png" alt="openmemfs: own your context" width="420"></p>
