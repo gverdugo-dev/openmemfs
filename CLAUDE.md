@@ -103,7 +103,10 @@ at a database with data.
 
 - **`files`**: `id` (uuid), `path` (absolute, unique), `content` (text), `metadata` (a JSON
   object), `revision` (an integer bumped on every write), `created_at`, `updated_at`.
-- Folders are not stored. A folder exists while some path starts with it.
+- A folder exists while some file path starts with it, or because someone created it empty:
+  **`folders`** (`path` with its trailing slash) holds only those. Deleting a folder works only
+  when it has no files, and removes its empty subfolders and its tags. A file cannot take the
+  name of a created folder.
 - A name cannot be a file and a folder at once (`/a` and `/a/b` is a 409 `conflict`).
 - **Metadata** is where an agent writes for itself: state, summaries, links, anything it wants to
   find again without parsing the content. The core does not read it; modules may (`when`).
@@ -117,7 +120,7 @@ at a database with data.
 - **`tags`**: `id`, `name` (unique, ignoring case), `color`. **`file_tags`** (`file_id`, `tag_id`) and
   **`folder_tags`** (`folder` with its trailing slash, `tag_id`) relate them. Folders are not rows,
   so a folder tag is keyed by its path; it applies to every file under the folder when filtering
-  (`folder_tags` in a file). Tagging a folder needs a file in it. Tags are addressed by name in
+  (`folder_tags` in a file). Tagging a folder needs the folder to exist. Tags are addressed by name in
   the API and the tools, categories by id.
 - **Colours**: every tag, category and subcategory has one of the palette in `src/lib/colors.ts`
   (gray, brown, orange, yellow, green, blue, purple, pink, red). Without one, a new label gets a
@@ -153,6 +156,9 @@ DELETE /api/files/:id                             delete_file
 PUT    /api/files/:id/category                    set_file_category  { category_id | null }
 POST   /api/files/:id/tags                        tag_file        { tag }
 DELETE /api/files/:id/tags/:tag                   untag_file
+GET    /api/folders                               list_folders    (empty ones included)
+POST   /api/folders                               create_folder   { path }
+DELETE /api/folders?path=/a/                      delete_folder   (only when empty)
 GET    /api/folders/tags?folder=/a/               (read_file shows folder_tags)
 POST   /api/folders/tags                          tag_folder      { folder, tag }
 DELETE /api/folders/tags?folder=&tag=             untag_folder
@@ -228,8 +234,14 @@ Then add tests for its routes and tools next to `src/server/app.test.ts` and run
 
 The black sketchbook of Modyard and Widgetry: white paper, black ink, 2px black outlines, a black
 marker for emphasis and the primary button, Inter 800 for headings and uppercase labels, Poppins for
-reading. The tokens live in `src/styles.css`; use them by name (`text-ink-2`, `bg-wash`,
-`border-line`, `btn btn-primary`, `field`, `marker`).
+reading. The tokens live in `src/styles.css`; use them by name (`text-ink`, `bg-paper`,
+`text-ink-2`, `bg-wash`, `border-line`, `btn btn-primary`, `field`, `marker`).
+
+- **Light and dark.** `:root` holds the light tokens and `:root.dark` the dark ones; `ink` is
+  black in light and white in dark, `paper` the opposite. Never write `black`, `white`, `#000`
+  or `#fff` in a component: use `ink` and `paper`, and the dark theme follows. The class comes
+  from `THEME_SCRIPT` (`src/components/Theme.tsx`), run in `<head>` before the first paint: the
+  choice saved in `localStorage` (`theme`), or the system's. The button in the sidebar flips it.
 
 - The only colour is the label palette (`[data-color]` in `src/styles.css`, read with `chip-tone`,
   `chip-tone-muted` and `tone-dot`), and only on tags, categories and subcategories. Any other

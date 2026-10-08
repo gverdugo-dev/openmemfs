@@ -6,8 +6,8 @@ import type { Services } from './services'
 import { COLORS } from './services/shared'
 
 const INSTRUCTIONS = `A memory made of text files (mostly Markdown) that a person also reads and edits in a
-Notion-style editor. Paths are absolute, like /notes/today.md; folders are not created, they
-exist while some file is in them. Look before writing: list_files to find what exists, then
+Notion-style editor. Paths are absolute, like /notes/today.md; a folder exists while some file is in
+it, or because it was created empty (create_folder). Look before writing: list_files to find what exists, then
 read_file. Prefer edit_file over rewriting a whole file. Pass if_revision (from read_file) when
 you write over something you read, so you never overwrite a change the person just made.
 Metadata is a JSON object per file for your own notes. Files can carry tags (on the file or
@@ -52,7 +52,7 @@ const color = z.enum(COLORS).optional().describe('a colour for the interface; on
 const ifRevision = z.number().int().optional().describe('write only if the file is still at this revision')
 
 /** The core tools: the twin of every route in `api.ts`. Agents always write as `agent`. */
-export function coreTools(mcp: McpServer, { files, tags, categories }: Services) {
+export function coreTools(mcp: McpServer, { files, folders, tags, categories }: Services) {
   const agent = { author: 'agent' as const }
 
   tool(
@@ -114,6 +114,17 @@ export function coreTools(mcp: McpServer, { files, tags, categories }: Services)
     await files.remove((await files.find(i)).id)
   })
 
+  tool(mcp, 'list_folders', 'List every folder, empty ones included, like /notes/.', {}, () => folders.list())
+  tool(
+    mcp,
+    'create_folder',
+    'Create an empty folder, like /notes/ideas/. Not needed before writing a file: its folders exist with it.',
+    { path: z.string() },
+    async (i) => ({ path: await folders.create(i.path) }),
+  )
+  tool(mcp, 'delete_folder', 'Delete an empty folder. A folder with files keeps them: delete or move them first.', { path: z.string() }, (i) =>
+    folders.remove(i.path),
+  )
   tool(
     mcp,
     'set_file_category',

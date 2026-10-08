@@ -1,11 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { type ReactNode, useMemo, useState } from 'react'
 import { type Entry, folders } from '#/lib/api'
-import { folderTagsQuery, searchQuery } from '#/lib/queries'
+import { folderTagsQuery, foldersQuery, searchQuery } from '#/lib/queries'
 import { CategoryBadge } from './Categories'
 import { FileIcon, FolderIcon, GridIcon, ListIcon } from './Icons'
-import { NewFile } from './NewFile'
+import { NewFile, NewFolder } from './NewFile'
 import { Page } from './Page'
 import { TagEditor, TagList } from './Tags'
 
@@ -18,10 +18,15 @@ interface Child {
   files: number
 }
 
-/** What a folder holds directly: its folders and its files. Folders come out of the paths. */
-function contentsOf(folder: string, entries: Entry[]) {
+/** What a folder holds directly: its folders (from the file paths and the created ones) and its files. */
+function contentsOf(folder: string, entries: Entry[], folderPaths: string[]) {
   const children = new Map<string, Child>()
   const files: Entry[] = []
+  for (const path of folderPaths) {
+    if (!path.startsWith(folder) || path === folder) continue
+    const name = path.slice(folder.length).split('/')[0] ?? ''
+    if (!children.has(name)) children.set(name, { name, path: `${folder}${name}/`, files: 0 })
+  }
   for (const entry of entries) {
     const rest = entry.path.slice(folder.length)
     const slash = rest.indexOf('/')
@@ -45,10 +50,13 @@ const count = (n: number) => `${n} ${n === 1 ? 'file' : 'files'}`
  */
 export function FolderPage({ folder, layout = 'grid' }: { folder: string; layout?: Layout }) {
   const queryClient = useQueryClient()
-  const [creating, setCreating] = useState(false)
+  const navigate = useNavigate()
+  const [creating, setCreating] = useState<'file' | 'folder' | null>(null)
+  const [error, setError] = useState('')
   const { data: tags = [] } = useQuery(folderTagsQuery(folder))
   const { data: entries } = useQuery(searchQuery({ prefix: folder }))
-  const contents = useMemo(() => contentsOf(folder, entries ?? []), [folder, entries])
+  const { data: folderPaths = [] } = useQuery(foldersQuery)
+  const contents = useMemo(() => contentsOf(folder, entries ?? [], folderPaths), [folder, entries, folderPaths])
 
   async function change(action: () => Promise<unknown>) {
     await action()
@@ -61,17 +69,28 @@ export function FolderPage({ folder, layout = 'grid' }: { folder: string; layout
 
   const segments = folder.slice(1, -1).split('/')
   const empty = contents.folders.length === 0 && contents.files.length === 0
+  const parent = `/${segments.slice(0, -1).join('/')}${segments.length > 1 ? '/' : ''}`
+
+  async function remove() {
+    try {
+      await folders.remove(folder)
+      await queryClient.invalidateQueries({ queryKey: ['files'] })
+      void navigate({ to: '/', search: { view: 'folder', folder: parent, layout } })
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
 
   return (
     <Page>
       <nav className="flex flex-wrap items-center gap-1 font-mono text-xs text-ink-3" aria-label="Folder path">
-        <Link to="/" search={{ view: 'folder', folder: '/', layout }} className="hover:text-black hover:underline">
+        <Link to="/" search={{ view: 'folder', folder: '/', layout }} className="hover:text-ink hover:underline">
           /
         </Link>
         {segments.slice(0, -1).map((segment, i) => {
           const path = `/${segments.slice(0, i + 1).join('/')}/`
           return (
-            <Link key={path} to="/" search={{ view: 'folder', folder: path, layout }} className="hover:text-black hover:underline">
+            <Link key={path} to="/" search={{ view: 'folder', folder: path, layout }} className="hover:text-ink hover:underline">
               {segment}/
             </Link>
           )
@@ -100,13 +119,29 @@ export function FolderPage({ folder, layout = 'grid' }: { folder: string; layout
         </p>
         <div className="flex items-center gap-2">
           <LayoutSwitch folder={folder} layout={layout} />
-          <button type="button" className="btn btn-outline h-8 px-3" onClick={() => setCreating(true)}>
-            New file here
+          <button type="button" className="btn btn-primary h-8 px-3" onClick={() => setCreating('file')}>
+            <FileIcon className="size-4" />
+            New file
+          </button>
+          <button type="button" className="btn btn-outline h-8 px-3" onClick={() => setCreating('folder')}>
+            <FolderIcon className="size-4" />
+            New folder
           </button>
         </div>
       </div>
-      {creating && <NewFile folder={folder} onClose={() => setCreating(false)} />}
-      {entries && empty && <p className="py-3 text-sm text-ink-2">Nothing here yet.</p>}
+      {creating === 'file' && <NewFile folder={folder} onClose={() => setCreating(null)} />}
+      {creating === 'folder' && <NewFolder folder={folder} onClose={() => setCreating(null)} />}
+      {entries && empty && (
+        <div className="py-3 text-sm text-ink-2">
+          <p>Nothing here yet. Create a file or a folder with the buttons above.</p>
+          {folder !== '/' && (
+            <button type="button" className="btn btn-ghost mt-3 h-8 px-2 text-destructive" onClick={remove}>
+              Delete this empty folder
+            </button>
+          )}
+          {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+        </div>
+      )}
       {entries && !empty && (layout === 'grid' ? <Grid {...contents} layout={layout} /> : <List {...contents} layout={layout} />)}
     </Page>
   )
@@ -121,13 +156,13 @@ function LayoutSwitch({ folder, layout }: { folder: string; layout: Layout }) {
       aria-label={label}
       title={label}
       aria-current={layout === value ? 'true' : undefined}
-      className={`grid size-8 place-items-center ${layout === value ? 'bg-black text-white' : 'bg-white text-black hover:bg-hover'}`}
+      className={`grid size-8 place-items-center ${layout === value ? 'bg-ink text-paper' : 'bg-paper text-ink hover:bg-hover'}`}
     >
       {icon}
     </Link>
   )
   return (
-    <div className="flex overflow-hidden rounded-md border-2 border-black" role="group" aria-label="Layout">
+    <div className="flex overflow-hidden rounded-md border-2 border-ink" role="group" aria-label="Layout">
       {option('grid', 'Blocks', <GridIcon />)}
       {option('list', 'List', <ListIcon />)}
     </div>
@@ -143,14 +178,14 @@ interface ContentsProps {
 const nameOf = (entry: Entry) => entry.path.slice(entry.path.lastIndexOf('/') + 1)
 
 function Grid({ folders: children, files, layout }: ContentsProps) {
-  const tile = 'flex min-h-28 flex-col gap-2 rounded-md border-2 border-line-strong bg-white p-3 transition-colors hover:border-black'
+  const tile = 'flex min-h-28 flex-col gap-2 rounded-md border-2 border-line-strong bg-paper p-3 transition-colors hover:border-ink'
   return (
     <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       {children.map((child) => (
         <li key={child.path}>
           <Link to="/" search={{ view: 'folder', folder: child.path, layout }} className={`${tile} h-full`}>
-            <FolderIcon className="size-7 text-black" />
-            <span className="truncate font-display font-bold text-black" title={child.name}>
+            <FolderIcon className="size-7 text-ink" />
+            <span className="truncate font-display font-bold text-ink" title={child.name}>
               {child.name}
             </span>
             <span className="mt-auto text-xs text-ink-3">{count(child.files)}</span>
@@ -161,7 +196,7 @@ function Grid({ folders: children, files, layout }: ContentsProps) {
         <li key={file.id}>
           <Link to="/" search={{ path: file.path }} className={`${tile} h-full`}>
             <FileIcon className="size-7 text-ink-2" />
-            <span className="truncate font-display font-bold text-black" title={nameOf(file)}>
+            <span className="truncate font-display font-bold text-ink" title={nameOf(file)}>
               {nameOf(file)}
             </span>
             <span className="mt-auto flex flex-wrap gap-1">
@@ -182,8 +217,8 @@ function List({ folders: children, files, layout }: ContentsProps) {
       {children.map((child) => (
         <li key={child.path} className="border-b border-line">
           <Link to="/" search={{ view: 'folder', folder: child.path, layout }} className={row}>
-            <FolderIcon className="size-5 shrink-0 text-black" />
-            <span className="min-w-0 flex-1 truncate font-display font-bold text-black">{child.name}</span>
+            <FolderIcon className="size-5 shrink-0 text-ink" />
+            <span className="min-w-0 flex-1 truncate font-display font-bold text-ink">{child.name}</span>
             <span className="text-xs text-ink-3">{count(child.files)}</span>
           </Link>
         </li>
@@ -192,7 +227,7 @@ function List({ folders: children, files, layout }: ContentsProps) {
         <li key={file.id} className="border-b border-line">
           <Link to="/" search={{ path: file.path }} className={row}>
             <FileIcon className="size-5 shrink-0 text-ink-2" />
-            <span className="min-w-0 flex-1 truncate font-display font-bold text-black">{nameOf(file)}</span>
+            <span className="min-w-0 flex-1 truncate font-display font-bold text-ink">{nameOf(file)}</span>
             <CategoryBadge id={file.category_id} />
             <TagList tags={file.tags} inherited={file.folder_tags} />
           </Link>

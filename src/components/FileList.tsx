@@ -14,7 +14,7 @@ export function FileList({ entries, empty }: { entries: Entry[]; empty: string }
           <li key={entry.id} className="border-b border-line">
             <Link to="/" search={{ path: entry.path }} className="block py-3 hover:bg-hover">
               <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="font-display font-bold text-black">{entry.path.slice(slash + 1)}</span>
+                <span className="font-display font-bold text-ink">{entry.path.slice(slash + 1)}</span>
                 <span className="font-mono text-xs text-ink-3">{entry.path.slice(0, slash + 1)}</span>
                 <CategoryBadge id={entry.category_id} />
               </span>

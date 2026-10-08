@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { webModules } from '#/modules/web'
-import { filesQuery } from '#/lib/queries'
+import { filesQuery, foldersQuery } from '#/lib/queries'
 import type { Place } from '#/lib/place'
 import { FilePage } from './FilePage'
 import { FolderPage } from './FolderPage'
@@ -16,13 +16,14 @@ const pages = webModules.flatMap((m) => m.pages ?? [])
 /** The sidebar on the left and, on the right, a module page, search, tags and categories, a folder, a file, or the home. */
 export function Workspace({ place }: { place: Place }) {
   const { data: entries = [] } = useQuery(filesQuery)
+  const { data: folders = [] } = useQuery(foldersQuery)
 
   const page = pages.find((p) => p.id === place.page)
 
   return (
     <div className="grid h-dvh grid-cols-[16rem_1fr] max-md:grid-cols-1 max-md:grid-rows-[auto_1fr]">
       <div className="min-h-0 max-md:max-h-[40dvh]">
-        <Sidebar entries={entries} place={place} pages={pages} />
+        <Sidebar entries={entries} folders={folders} place={place} pages={pages} />
       </div>
       <main className="min-h-0 overflow-y-auto">
         {page ? (

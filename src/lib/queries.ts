@@ -20,6 +20,9 @@ export const fileQuery = (path: string) =>
     refetchOnWindowFocus: false,
   })
 
+/** Every folder, empty ones included. Under ['files'], so it follows every change to the files. */
+export const foldersQuery = queryOptions({ queryKey: ['files', 'folders'], queryFn: folders.list })
+
 export const tagsQuery = queryOptions({ queryKey: ['tags'], queryFn: tags.list })
 
 export const categoriesQuery = queryOptions({ queryKey: ['categories'], queryFn: categories.list })

@@ -94,8 +94,10 @@ export function createTags(sql: Sql) {
     async tagFolder(folder: string, name: string): Promise<string[]> {
       const checked = checkFolder(folder)
       await sql.begin(async (tx) => {
-        const [inside] = await tx`select 1 from files where starts_with(path, ${checked}) limit 1`
-        if (!inside) throw notFound(`no folder ${checked}: a folder exists while some file is in it`)
+        const [inside] = await tx`
+          select 1 from files where starts_with(path, ${checked})
+          union all select 1 from folders where starts_with(path, ${checked}) limit 1`
+        if (!inside) throw notFound(`no folder ${checked}`)
         const tagId = await ensure(tx, name)
         await tx`insert into folder_tags (folder, tag_id) values (${checked}, ${tagId}) on conflict do nothing`
       })

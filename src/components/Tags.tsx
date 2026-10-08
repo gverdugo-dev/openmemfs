@@ -86,7 +86,7 @@ export function TagEditor({ tags, inherited = [], onAdd, onRemove }: EditorProps
         <form onSubmit={submit}>
           <input
             aria-label="Add a tag"
-            className="h-6 w-28 rounded-full border-2 border-dashed border-line-strong bg-transparent px-2 text-xs outline-none focus:border-black"
+            className="h-6 w-28 rounded-full border-2 border-dashed border-line-strong bg-transparent px-2 text-xs outline-none focus:border-ink"
             placeholder="+ tag"
             list={listId}
             value={value}

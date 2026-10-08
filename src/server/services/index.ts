@@ -1,6 +1,7 @@
 import type { Sql } from '../db'
 import { createCategories } from './categories'
 import { createFiles, type WriteHook } from './files'
+import { createFolders } from './folders'
 import { createTags } from './tags'
 
 export type Services = ReturnType<typeof createServices>
@@ -13,6 +14,7 @@ export type Services = ReturnType<typeof createServices>
 export function createServices(sql: Sql, afterWrite: WriteHook[] = []) {
   return {
     files: createFiles(sql, afterWrite),
+    folders: createFolders(sql),
     tags: createTags(sql),
     categories: createCategories(sql),
   }

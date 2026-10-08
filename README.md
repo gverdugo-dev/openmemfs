@@ -25,6 +25,9 @@ extended by modules.
 - **Metadata**: a JSON object per file, where an agent writes notes for itself (state, summary,
   links) through the API or MCP, without touching the content.
 - **Rename and move**: edit the name at the top of the page; a name starting with `/` moves the file.
+- **New file and New folder**: buttons in the sidebar and on every folder page. You type a name;
+  the file or folder goes where you are. A folder can be empty, and an empty folder can be deleted.
+- **Light and dark**: follows your system until you pick one with the button in the sidebar.
 - **Tags**: on a file or on a folder (every file below carries a folder's tags when you filter).
 - **Categories and subcategories**: one per file, managed on the Tags & categories page.
 - **Search**: by file name, by content or both, filtered by tags (all of them), by category (with

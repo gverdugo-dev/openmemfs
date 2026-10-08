@@ -8,7 +8,7 @@ export function Swatch({ color, className = 'size-2.5' }: { color: Color; classN
   return <span data-color={color} className={`tone-dot inline-block shrink-0 rounded-full ${className}`} aria-hidden="true" />
 }
 
-/** The nine colours of the palette as buttons, the chosen one ringed in black. */
+/** The nine colours of the palette as buttons, the chosen one ringed in ink. */
 export function ColorPicker({ value, onChange, label }: { value: Color; onChange: (color: Color) => void; label: string }) {
   return (
     <span role="radiogroup" aria-label={label} className="flex items-center gap-1">
@@ -21,7 +21,7 @@ export function ColorPicker({ value, onChange, label }: { value: Color; onChange
           aria-label={color}
           title={color}
           data-color={color}
-          className={`tone-dot size-4 rounded-full ring-offset-2 transition-transform hover:scale-110 ${color === value ? 'ring-2 ring-black' : ''}`}
+          className={`tone-dot size-4 rounded-full ring-offset-2 transition-transform hover:scale-110 ${color === value ? 'ring-2 ring-ink ring-offset-paper' : ''}`}
           onClick={() => color !== value && onChange(color)}
         />
       ))}

@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { createRootRouteWithContext, HeadContent, Scripts } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { Page } from '#/components/Page'
+import { THEME_SCRIPT } from '#/components/Theme'
 import appCss from '../styles.css?url'
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
@@ -11,7 +12,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       // A memory is private: no search engine should list it.
       { name: 'robots', content: 'noindex' },
-      { name: 'theme-color', content: '#000000' },
+      { name: 'theme-color', content: '#ffffff', media: '(prefers-color-scheme: light)' },
+      { name: 'theme-color', content: '#161616', media: '(prefers-color-scheme: dark)' },
       { name: 'description', content: 'A memory made of files, for you and your agents.' },
       { title: 'openmemfs' },
     ],
@@ -35,8 +37,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function Document({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    // The theme script sets a class on <html> before React hydrates: that difference is expected.
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* A fixed script of ours: it has to run before the first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <HeadContent />
       </head>
       <body>

@@ -35,7 +35,7 @@ export function Organize() {
   return (
     <Page>
       <h1 className="text-4xl md:text-5xl">Tags & categories</h1>
-      {error && <p className="mt-4 rounded-lg border-2 border-black bg-wash px-4 py-3 text-sm text-black">{error}</p>}
+      {error && <p className="mt-4 rounded-lg border-2 border-ink bg-wash px-4 py-3 text-sm text-ink">{error}</p>}
 
       <section className="mt-10">
         <h2 className="text-2xl">Categories</h2>

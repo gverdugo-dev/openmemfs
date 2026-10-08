@@ -4,13 +4,22 @@
 @import '@fontsource/poppins/500.css';
 @import '@fontsource/poppins/600.css';
 
+/* The dark theme hangs from a class on <html>, set before paint by the script in __root.tsx. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
  * The sketchbook of Widgetry and Modyard in black: white pages, a light grey sidebar, heavy
  * black Inter headings, Poppins for reading, 2px black outlines. Where Widgetry uses butter
  * yellow and Modyard light green, openmemfs uses black: the primary button, the active tab
  * and the marker swipe. To give an install its own colour, change --marker and --on-marker.
+ *
+ * Every colour is a token. --ink is the strongest ink (black, white in the dark theme) and
+ * --paper the page under it; components never name black or white, so the dark theme is only
+ * the second block below.
  */
 :root {
+  --ink: #000000;
+  --paper: #ffffff;
   --background: #ffffff;
   --foreground: #000000;
   --body-ink: #353535;
@@ -32,10 +41,36 @@
   --radius: 0.5rem;
 }
 
+/* The dark theme: the same sketchbook drawn in white ink on near-black paper. */
+:root.dark {
+  --ink: #f2f2f0;
+  --paper: #161616;
+  --background: #161616;
+  --foreground: #f2f2f0;
+  --body-ink: #d4d4d2;
+  --ink-2: rgb(255 255 255 / 72%);
+  --ink-3: rgb(255 255 255 / 58%);
+  --ink-4: rgb(255 255 255 / 42%);
+  --line: rgb(255 255 255 / 12%);
+  --line-strong: rgb(255 255 255 / 24%);
+  --wash: #1f1f1f;
+  --hover: rgb(255 255 255 / 6%);
+  --pressed: rgb(255 255 255 / 11%);
+
+  --marker: #f2f2f0;
+  --on-marker: #111111;
+  --marker-soft: rgb(255 255 255 / 20%);
+
+  --live: #4fbf85;
+  --destructive: #ff7b66;
+}
+
 @theme inline {
   --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Inter Variable', 'Poppins', ui-sans-serif, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-body-ink: var(--body-ink);
@@ -67,6 +102,10 @@
     color-scheme: light;
   }
 
+  html.dark {
+    color-scheme: dark;
+  }
+
   body {
     margin: 0;
     background: var(--background);
@@ -74,8 +113,8 @@
     font-family: var(--font-sans);
     font-size: 16px;
     line-height: 1.65;
-    caret-color: #000;
-    scrollbar-color: rgb(0 0 0 / 28%) transparent;
+    caret-color: var(--ink);
+    scrollbar-color: var(--line-strong) transparent;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -94,7 +133,7 @@
 
   ::selection {
     background: var(--marker-soft);
-    color: #000;
+    color: var(--ink);
   }
 
   :focus-visible {
@@ -122,7 +161,7 @@
   gap: 0.4rem;
   height: 2.5rem;
   padding-inline: 1rem;
-  border: 2px solid #000;
+  border: 2px solid var(--ink);
   border-radius: var(--radius);
   font-family: var(--font-display);
   font-size: 13px;
@@ -151,13 +190,13 @@
   color: var(--on-marker);
 
   &:hover:not(:disabled) {
-    background: rgb(0 0 0 / 80%);
+    background: color-mix(in srgb, var(--marker) 80%, var(--paper));
   }
 }
 
 @utility btn-outline {
-  background: #fff;
-  color: #000;
+  background: var(--paper);
+  color: var(--ink);
 
   &:hover:not(:disabled) {
     background: var(--hover);
@@ -171,7 +210,7 @@
 
   &:hover:not(:disabled) {
     background: var(--hover);
-    color: #000;
+    color: var(--ink);
   }
 }
 
@@ -182,10 +221,10 @@
   gap: 0.25rem;
   height: 1.5rem;
   padding-inline: 0.6rem;
-  border: 2px solid #000;
+  border: 2px solid var(--ink);
   border-radius: 999px;
-  background: #fff;
-  color: #000;
+  background: var(--paper);
+  color: var(--ink);
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -197,21 +236,21 @@
 }
 
 @utility chip-on {
-  background: #000;
-  color: #fff;
+  background: var(--ink);
+  color: var(--paper);
 }
 
 @utility field {
   width: 100%;
   border: 2px solid var(--line-strong);
   border-radius: var(--radius);
-  background: #fff;
-  color: #000;
+  background: var(--paper);
+  color: var(--ink);
   padding: 0.5rem 0.75rem;
   transition: border-color 150ms;
 
   &:focus {
-    border-color: #000;
+    border-color: var(--ink);
     outline: none;
   }
 }
@@ -264,7 +303,7 @@
 }
 
 .prose-openmemfs a {
-  color: #000;
+  color: var(--ink);
   font-weight: 500;
   text-decoration: underline;
   text-decoration-thickness: 2px;
@@ -272,7 +311,7 @@
 }
 
 .prose-openmemfs strong {
-  color: #000;
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -298,7 +337,7 @@
 }
 
 .prose-openmemfs li::marker {
-  color: #000;
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -306,7 +345,7 @@
   padding: 0.12em 0.38em;
   border-radius: 6px;
   background: var(--wash);
-  color: #000;
+  color: var(--ink);
   font-family: var(--font-mono);
   font-size: 0.86em;
 }
@@ -314,10 +353,10 @@
 .prose-openmemfs pre {
   overflow-x: auto;
   padding: 16px 18px;
-  border: 2px solid #000;
+  border: 2px solid var(--ink);
   border-radius: 12px;
-  background: #fff;
-  color: #000;
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--font-mono);
   font-size: 13.5px;
   line-height: 1.65;
@@ -325,7 +364,7 @@
 
 .prose-openmemfs blockquote {
   padding: 12px 18px;
-  border-left: 4px solid #000;
+  border-left: 4px solid var(--ink);
   border-radius: 0 10px 10px 0;
   background: var(--wash);
 }
@@ -359,6 +398,17 @@
 [data-color='pink'] { --tone-fill: #f8e1ec; --tone-ink: #722951; --tone-dot: #c9548f; }
 [data-color='red'] { --tone-fill: #fbe2de; --tone-ink: #7f2519; --tone-dot: #d5493a; }
 
+/* The same hues in the dark theme: a deep fill, a light ink, the dot a step brighter. */
+.dark [data-color='gray'] { --tone-fill: #2c2c2a; --tone-ink: #dcdbd6; --tone-dot: #9b9a95; }
+.dark [data-color='brown'] { --tone-fill: #3a2b22; --tone-ink: #ecd3c3; --tone-dot: #b9836a; }
+.dark [data-color='orange'] { --tone-fill: #43290f; --tone-ink: #f8cfa6; --tone-dot: #f08c33; }
+.dark [data-color='yellow'] { --tone-fill: #3d3410; --tone-ink: #f3e19b; --tone-dot: #e2b52a; }
+.dark [data-color='green'] { --tone-fill: #183324; --tone-ink: #b5e2c5; --tone-dot: #52b07a; }
+.dark [data-color='blue'] { --tone-fill: #172c44; --tone-ink: #b8d4f2; --tone-dot: #5596d6; }
+.dark [data-color='purple'] { --tone-fill: #2d2240; --tone-ink: #d7c4ef; --tone-dot: #a37ccd; }
+.dark [data-color='pink'] { --tone-fill: #3f1d2e; --tone-ink: #f2bfd7; --tone-dot: #dc6aa3; }
+.dark [data-color='red'] { --tone-fill: #431c16; --tone-ink: #f6bdb3; --tone-dot: #e8624f; }
+
 /* A chip in its label colour: soft fill, outline and ink of the same hue. */
 @utility chip-tone {
   border-color: var(--tone-dot);
@@ -370,7 +420,7 @@
 @utility chip-tone-muted {
   border-style: dashed;
   border-color: var(--tone-dot);
-  background: #fff;
+  background: var(--paper);
   color: var(--tone-ink);
 }
 

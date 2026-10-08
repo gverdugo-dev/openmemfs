@@ -22,7 +22,7 @@ describe.skipIf(!url)('the API', () => {
   })
   afterAll(() => sql.end())
   beforeEach(async () => {
-    await sql`truncate files, tags, categories cascade`
+    await sql`truncate files, folders, tags, categories cascade`
     app = createApp(sql, config(300))
   })
 
@@ -245,6 +245,24 @@ describe.skipIf(!url)('the API', () => {
       [1, 'First draft'],
     ])
     expect((await json(await call('GET', `/files/${id}/versions/1`))).body.content).toBe('one')
+  })
+
+  test('folders can be created empty, are listed with the folders of files, and deleted when empty', async () => {
+    await call('POST', '/files', { path: '/docs/a.md' })
+    expect((await call('POST', '/folders', { path: '/ideas/later' })).status).toBe(201)
+    expect((await json(await call('GET', '/folders'))).body).toEqual(['/docs/', '/ideas/', '/ideas/later/'])
+    expect((await call('POST', '/folders', { path: '/docs/' })).status).toBe(409)
+    expect((await call('POST', '/folders', { path: '/docs/a.md/' })).status).toBe(409)
+    expect((await call('POST', '/files', { path: '/ideas/later' })).status).toBe(409)
+    expect((await call('POST', '/folders/tags', { folder: '/ideas/', tag: 'someday' })).status).toBe(200)
+
+    await call('POST', '/files', { path: '/ideas/later/one.md' })
+    expect((await call('DELETE', '/folders?path=/ideas/')).status).toBe(409)
+    const file = await json(await call('GET', '/files/by-path?path=/ideas/later/one.md'))
+    await call('DELETE', `/files/${file.body.id}`)
+    expect((await call('DELETE', '/folders?path=/ideas/')).status).toBe(204)
+    expect((await json(await call('GET', '/folders'))).body).toEqual(['/docs/'])
+    expect((await call('DELETE', '/folders?path=/ideas/')).status).toBe(404)
   })
 
   test('edit replaces a piece that appears exactly once', async () => {

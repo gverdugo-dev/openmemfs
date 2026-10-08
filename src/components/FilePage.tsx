@@ -86,7 +86,7 @@ export function FilePage({ path, tab, tabs }: Props) {
       <Page>
         <h1 className="text-4xl">Not here</h1>
         <p className="mt-3 text-ink-2">
-          There is no file at <code className="font-mono text-black">{path}</code>. It may have been moved or deleted.
+          There is no file at <code className="font-mono text-ink">{path}</code>. It may have been moved or deleted.
         </p>
       </Page>
     )
@@ -177,8 +177,8 @@ export function FilePage({ path, tab, tabs }: Props) {
       </dl>
 
       {(saving === 'conflict' || saving === 'error') && (
-        <div className="mt-4 rounded-lg border-2 border-black bg-wash px-4 py-3 text-sm">
-          <p className="text-black">
+        <div className="mt-4 rounded-lg border-2 border-ink bg-wash px-4 py-3 text-sm">
+          <p className="text-ink">
             {saving === 'conflict'
               ? 'This file changed somewhere else (an agent, another tab) since you opened it. Your last edit is not saved.'
               : message}
@@ -208,7 +208,7 @@ export function FilePage({ path, tab, tabs }: Props) {
             role="tab"
             aria-selected={t === active}
             onClick={() => void navigate({ to: '/', search: { path: file.path, tab: t.id }, replace: true })}
-            className={`-mb-0.5 border-b-2 pb-2 font-display text-[13px] font-bold tracking-[0.04em] uppercase transition-colors ${t === active ? 'border-black text-black' : 'border-transparent text-ink-3 hover:text-black'}`}
+            className={`-mb-0.5 border-b-2 pb-2 font-display text-[13px] font-bold tracking-[0.04em] uppercase transition-colors ${t === active ? 'border-ink text-ink' : 'border-transparent text-ink-3 hover:text-ink'}`}
           >
             {t.label}
           </button>
@@ -230,7 +230,7 @@ function FileName({ name, onRename }: { name: string; onRename: (name: string) =
   return (
     <input
       aria-label="File name"
-      className="mt-2 w-full bg-transparent font-display text-4xl font-extrabold tracking-tight text-black outline-none md:text-5xl"
+      className="mt-2 w-full bg-transparent font-display text-4xl font-extrabold tracking-tight text-ink outline-none md:text-5xl"
       value={value}
       spellCheck={false}
       onChange={(e) => setValue(e.target.value)}

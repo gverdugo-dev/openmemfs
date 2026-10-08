@@ -124,11 +124,11 @@ function HistoryTab({ file, replace }: TabProps) {
                 aria-expanded={open === v.version}
                 onClick={() => setOpen(open === v.version ? null : v.version)}
               >
-                <span className="w-10 shrink-0 font-display text-sm font-bold text-black">v{v.version}</span>
-                <span className={`min-w-0 truncate text-sm ${v.message ? 'font-medium text-black' : 'text-ink-3'}`}>
+                <span className="w-10 shrink-0 font-display text-sm font-bold text-ink">v{v.version}</span>
+                <span className={`min-w-0 truncate text-sm ${v.message ? 'font-medium text-ink' : 'text-ink-3'}`}>
                   {v.message ?? 'Saved'}
                 </span>
-                <span className="rounded-full border-2 border-black px-2 font-display text-[11px] leading-[18px] font-bold tracking-[0.04em] text-black uppercase">
+                <span className="rounded-full border-2 border-ink px-2 font-display text-[11px] leading-[18px] font-bold tracking-[0.04em] text-ink uppercase">
                   {v.author}
                 </span>
                 <span className="text-xs text-ink-3">{when.format(new Date(v.updated_at))}</span>
@@ -167,7 +167,7 @@ function Changes({ fileId, version, base }: { fileId: string; version: number; b
     <div className="space-y-3 pb-4">
       <p className="text-xs text-ink-3">{base ? `Changes since v${base}` : 'The first version'}</p>
       {moved && (
-        <p className="font-mono text-xs text-black">
+        <p className="font-mono text-xs text-ink">
           {old.path} → {after.data.path}
         </p>
       )}

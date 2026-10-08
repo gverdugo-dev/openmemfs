@@ -287,12 +287,17 @@ function staleError(current: { path: string; revision: number }, ifRevision: num
   )
 }
 
-/** A name cannot be a file and a folder at once: "/a" and "/a/b.md" cannot both exist. */
+/**
+ * A name cannot be a file and a folder at once: "/a" and "/a/b.md" cannot both exist, and
+ * neither can a file "/a" and an empty folder "/a/".
+ */
 async function checkNoClash(tx: Tx, path: string, ownId: string | null) {
   const [clash] = await tx<{ path: string }[]>`
     select path from files
     where (${ownId}::uuid is null or id <> ${ownId}::uuid)
       and (starts_with(path, ${path + '/'}) or starts_with(${path}, path || '/'))
+    union all
+    select path from folders where starts_with(path, ${path + '/'})
     limit 1`
   if (clash) {
     throw new DomainError('conflict', `${path} clashes with ${clash.path}: a name cannot be a file and a folder`)

@@ -5,7 +5,8 @@ import type { ModulePage } from '#/lib/module'
 import type { Place } from '#/lib/place'
 import { FileIcon, FolderIcon, SearchIcon, TagIcon } from './Icons'
 import { Logo } from './Logo'
-import { NewFile } from './NewFile'
+import { NewFile, NewFolder } from './NewFile'
+import { ThemeToggle } from './Theme'
 
 interface Folder {
   name: string
@@ -14,13 +15,12 @@ interface Folder {
   files: Entry[]
 }
 
-/** Folders are not stored: they come out of the file paths. */
-export function treeOf(entries: Entry[]): Folder {
+/** The tree of the explorer: the folders of the file paths, plus the empty ones that were created. */
+export function treeOf(entries: Entry[], folderPaths: string[] = []): Folder {
   const root: Folder = { name: '', path: '/', folders: [], files: [] }
-  for (const entry of entries) {
-    const segments = entry.path.slice(1).split('/')
+  const folderOf = (segments: string[]) => {
     let folder = root
-    for (const name of segments.slice(0, -1)) {
+    for (const name of segments) {
       let next = folder.folders.find((f) => f.name === name)
       if (!next) {
         next = { name, path: `${folder.path}${name}/`, folders: [], files: [] }
@@ -28,20 +28,31 @@ export function treeOf(entries: Entry[]): Folder {
       }
       folder = next
     }
-    folder.files.push(entry)
+    return folder
   }
+  for (const path of folderPaths) folderOf(path.slice(1, -1).split('/'))
+  for (const entry of entries) folderOf(entry.path.slice(1).split('/').slice(0, -1)).files.push(entry)
+  const sort = (folder: Folder) => {
+    folder.folders.sort((a, b) => a.name.localeCompare(b.name))
+    folder.folders.forEach(sort)
+  }
+  sort(root)
   return root
 }
 
 interface Props {
   entries: Entry[]
+  /** Every folder, empty ones included. */
+  folders: string[]
   place: Place
   pages: ModulePage[]
 }
 
-export function Sidebar({ entries, place, pages }: Props) {
-  const tree = useMemo(() => treeOf(entries), [entries])
-  const [creating, setCreating] = useState(false)
+export function Sidebar({ entries, folders, place, pages }: Props) {
+  const tree = useMemo(() => treeOf(entries, folders), [entries, folders])
+  const [creating, setCreating] = useState<'file' | 'folder' | null>(null)
+  // New things go where you are: the open folder, or the folder of the open file.
+  const here = place.folder ?? (place.path ? place.path.slice(0, place.path.lastIndexOf('/') + 1) : '/')
 
   return (
     <aside className="flex h-full flex-col border-r border-line bg-wash">
@@ -49,17 +60,21 @@ export function Sidebar({ entries, place, pages }: Props) {
         <Link to="/" aria-label="openmemfs, home">
           <Logo className="text-lg" />
         </Link>
+        <ThemeToggle />
       </div>
       <div className="px-3 pb-3">
-        <button type="button" className="btn btn-primary w-full" onClick={() => setCreating(true)}>
-          New file
-        </button>
-        {creating && (
-          <NewFile
-            folder={place.folder ?? (place.path ? place.path.slice(0, place.path.lastIndexOf('/') + 1) : '/')}
-            onClose={() => setCreating(false)}
-          />
-        )}
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" className="btn btn-primary px-2" onClick={() => setCreating('file')}>
+            <FileIcon className="size-4" />
+            New file
+          </button>
+          <button type="button" className="btn btn-outline px-2" onClick={() => setCreating('folder')}>
+            <FolderIcon className="size-4" />
+            New folder
+          </button>
+        </div>
+        {creating === 'file' && <NewFile folder={here} onClose={() => setCreating(null)} />}
+        {creating === 'folder' && <NewFolder folder={here} onClose={() => setCreating(null)} />}
       </div>
       <nav className="border-t border-line px-2 py-2">
         <Row search={{ view: 'search' }} active={place.view === 'search'} depth={0} icon={<SearchIcon />}>
@@ -79,7 +94,7 @@ export function Sidebar({ entries, place, pages }: Props) {
         </nav>
       )}
       <nav className="min-h-0 flex-1 overflow-y-auto border-t border-line px-2 py-2" aria-label="Files">
-        {entries.length === 0 ? (
+        {entries.length === 0 && folders.length === 0 ? (
           <p className="px-2 py-1 text-sm text-ink-3">No files yet.</p>
         ) : (
           <FolderItems folder={tree} depth={0} open={place.path} openFolder={place.view === 'folder' ? place.folder : undefined} />
@@ -126,7 +141,7 @@ function FolderItem({ folder, depth, open, openFolder }: ItemsProps) {
   return (
     <li>
       <div
-        className={`group flex items-center rounded-md text-sm font-medium text-black ${active ? 'bg-pressed' : 'hover:bg-hover'}`}
+        className={`group flex items-center rounded-md text-sm font-medium text-ink ${active ? 'bg-pressed' : 'hover:bg-hover'}`}
         style={{ paddingLeft: `${4 + depth * 14}px` }}
       >
         <button
@@ -150,7 +165,7 @@ function FolderItem({ folder, depth, open, openFolder }: ItemsProps) {
         </Link>
         <button
           type="button"
-          className="mr-1 rounded px-1.5 text-base leading-6 text-ink-3 opacity-0 group-hover:opacity-100 hover:bg-pressed hover:text-black focus-visible:opacity-100 max-md:opacity-100"
+          className="mr-1 rounded px-1.5 text-base leading-6 text-ink-3 opacity-0 group-hover:opacity-100 hover:bg-pressed hover:text-ink focus-visible:opacity-100 max-md:opacity-100"
           aria-label={`New file in ${folder.name}`}
           title={`New file in ${folder.path}`}
           onClick={() => setCreating(true)}
@@ -183,7 +198,7 @@ function Row({ search, active, depth, icon, children }: RowProps) {
       to="/"
       search={search}
       title={children}
-      className={`flex items-center gap-1.5 rounded-md py-1 pr-2 text-sm ${active ? 'bg-pressed font-medium text-black' : 'text-ink-2 hover:bg-hover hover:text-black'}`}
+      className={`flex items-center gap-1.5 rounded-md py-1 pr-2 text-sm ${active ? 'bg-pressed font-medium text-ink' : 'text-ink-2 hover:bg-hover hover:text-ink'}`}
       style={{ paddingLeft: `${8 + depth * 14 + (depth > 0 || search.path ? 18 : 0)}px` }}
       aria-current={active ? 'page' : undefined}
     >

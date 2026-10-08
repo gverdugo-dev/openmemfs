@@ -6,7 +6,7 @@ import type { Search, Services } from './services'
  * The REST door. Each route reads the request, calls one service and returns its answer:
  * no rule lives here. Every route has an MCP tool twin in `mcp.ts`.
  */
-export function coreRoutes(api: Api, { files, tags, categories }: Services) {
+export function coreRoutes(api: Api, { files, folders, tags, categories }: Services) {
   // Files
   api.get('/files', async (c) => {
     const search: Search = {
@@ -80,6 +80,17 @@ export function coreRoutes(api: Api, { files, tags, categories }: Services) {
   api.delete('/files/:id/tags/:tag', async (c) => {
     await tags.untagFile(c.req.param('id'), c.req.param('tag'))
     return c.json(await files.get(c.req.param('id')))
+  })
+
+  // Folders. One exists while a file is in it, or because someone created it (then it may be empty).
+  api.get('/folders', async (c) => c.json(await folders.list()))
+  api.post('/folders', async (c) => {
+    const { path } = await body<{ path?: unknown }>(c.req.raw)
+    return c.json({ path: await folders.create(path) }, 201)
+  })
+  api.delete('/folders', async (c) => {
+    await folders.remove(c.req.query('path') ?? '')
+    return c.body(null, 204)
   })
 
   // A folder's tags. The folder goes in the query: it has slashes of its own.
