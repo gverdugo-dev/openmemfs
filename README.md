@@ -28,7 +28,7 @@ keep, to read, to take elsewhere and to change.
 ## Extend it
 
 openmemfs grows by **modules**: a folder in `src/modules/<id>/` that can add a tab on every file,
-a page, API routes, MCP tools and its own tables. Content and History are modules too; read
+a page, API routes, MCP tools and its own tables. Content, History, Links and Suggestions are modules too; read
 `src/modules/history` and write yours next to it.
 
 The quickest way is to ask your agent. Open the repository in your harness and describe it:

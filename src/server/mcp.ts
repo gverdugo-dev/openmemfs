@@ -27,7 +27,11 @@ carry tags (on the file or on a folder above it) and one category or subcategory
 and list_files filter by both.
 
 Every save leaves a version: list_changes says what changed since the last commit, get_diff shows
-how, and commit_changes names those changes with a message when a piece of work is done.`
+how, and commit_changes names those changes with a message when a piece of work is done.
+
+A file can link to others by relation and in order (set_links, list_links, list_backlinks), like a
+post to its images. To propose changes the person should approve, such as a review of their
+writing, use suggest instead of editing: they accept or reject each one.`
 
 /** The answer of a tool: the result as JSON, or the message of a domain error. */
 type Result = { content: { type: 'text'; text: string }[]; isError?: boolean }

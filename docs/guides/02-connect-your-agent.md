@@ -36,6 +36,13 @@ Everything you can do in the interface, and the tools an agent needs to find its
 - **History**: `list_changes` (what changed since the last commit), `get_diff`,
   `commit_changes` (a folder or the whole memory, with one message), `list_commits`, and per file
   `list_versions`, `read_version`, `commit_file` and `restore_version`.
+- **Links**: `set_links` (a file points at others by relation and in order, like a post at its
+  images), `list_links` and `list_backlinks` (who points at a file). Links follow files when they
+  move.
+- **Suggestions**: `suggest` proposes edits to a file without making them, each with its reason;
+  you accept or reject them in the Suggestions tab. `list_suggestions` shows them (the rejected
+  ones tell an agent what you do not want), and `accept_suggestions` and `reject_suggestions`
+  decide them when you ask.
 
 Ask it "what do you know about my project X?" and it will search here.
 

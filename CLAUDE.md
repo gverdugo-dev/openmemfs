@@ -85,8 +85,10 @@ Content shows a file's YAML frontmatter as properties and never passes it throug
 (`src/modules/content/frontmatter.ts` splits it off and puts it back verbatim); its Markdown view
 edits the file as stored, and Copy file copies it whole.
 
-Content and History are modules like any other. Read them before writing a new one:
-`src/modules/content` is front only, `src/modules/history` has all three parts. Metadata has no
+Content, History, Links and Suggestions are modules like any other. Read them before writing a
+new one: `src/modules/content` is front only, `src/modules/history` has all three parts, `links`
+keeps its data in each file's metadata and has no tables, and `suggestions` keeps edits waiting
+for the person in a table of its own. Metadata has no
 tab: it is for agents, through the API and the tools (the history shows how it changed).
 
 ## Guides and the website
@@ -218,6 +220,14 @@ GET    /api/files/:id/diff?from&to                get_diff        (to: now, from
 GET    /api/history/changes?prefix=/a/            list_changes    (latest version not committed)
 POST   /api/history/commit                        commit_changes  { prefix?, message }
 GET    /api/history/commits?prefix&limit          list_commits
+GET    /api/files/:id/links                       list_links      (links module: in metadata.links, by id)
+PUT    /api/files/:id/links/:rel                  set_links       { paths, if_revision? }
+GET    /api/files/:id/backlinks                   list_backlinks
+POST   /api/files/:id/suggestions                 suggest         { suggestions: [{ old_string, new_string, reason? }], author? }
+GET    /api/suggestions?path&status               list_suggestions (suggestions module)
+GET    /api/suggestions/counts
+POST   /api/suggestions/accept                    accept_suggestions { ids }
+POST   /api/suggestions/reject                    reject_suggestions { ids }
 ```
 
 The tools take a file by `path` (what agents usually know) or `id`. A tool's name says what a
