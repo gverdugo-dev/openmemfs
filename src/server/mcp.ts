@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { caller } from './caller'
 import { DomainError } from './errors'
 import type { Services } from './services'
+import { SEARCH_IN } from './services'
 import { COLORS } from './services/shared'
 
 const INSTRUCTIONS = `Call get_organisation before anything else: it returns /organisation.md, the owner's
@@ -12,11 +13,21 @@ Format), and the current time. Those rules win over your habits.
 
 A memory made of text files (mostly Markdown) that a person also reads and edits in a
 Notion-style editor. Paths are absolute, like /notes/today.md; a folder exists while some file is in
-it, or because it was created empty (create_folder). Look before writing: list_files to find what exists, then
-read_file. Prefer edit_file over rewriting a whole file. Pass if_revision (from read_file) when
-you write over something you read, so you never overwrite a change the person just made.
-Metadata is a JSON object per file for your own notes. Files can carry tags (on the file or
-on a folder above it) and one category or subcategory; list_files filters by both.`
+it, or because it was created empty (create_folder).
+
+Find your way: get_tree shows the folders with how many files each holds, list_folder what one
+folder holds, and search_files finds files by the words in their path or content (with a snippet).
+Search before writing: a second file on a subject that already has one is the mistake to avoid.
+
+Read with read_file (offset and limit read a long file a piece at a time). Prefer edit_file to
+rewriting a whole file, append_file to add at the end, and write_file to create or replace one.
+Pass if_revision (from read_file) when you write over something you read, so you never overwrite
+a change the person just made. Metadata is a JSON object per file for your own notes. Files can
+carry tags (on the file or on a folder above it) and one category or subcategory; search_files
+and list_files filter by both.
+
+Every save leaves a version: list_changes says what changed since the last commit, get_diff shows
+how, and commit_changes names those changes with a message when a piece of work is done.`
 
 /** The answer of a tool: the result as JSON, or the message of a domain error. */
 type Result = { content: { type: 'text'; text: string }[]; isError?: boolean }
@@ -47,13 +58,13 @@ export function tool<Shape extends z.ZodRawShape>(
 }
 
 /**
- * What a client may assume about a tool, read from its name: `list_`, `read_` and `get_` only
- * read; `create_`, `tag_`, `commit_` and `restore_` only add; anything else may change or
+ * What a client may assume about a tool, read from its name: `list_`, `read_`, `get_` and
+ * `search_` only read; `create_`, `tag_`, `commit_`, `restore_` and `append_` only add; anything else may change or
  * remove what is there. A module tool named otherwise gets that cautious default.
  */
 function annotationsOf(name: string) {
-  if (/^(list|read|get)_/.test(name)) return { readOnlyHint: true, openWorldHint: false }
-  const removes = !/^(create|tag|commit|restore)_/.test(name)
+  if (/^(list|read|get|search)_/.test(name)) return { readOnlyHint: true, openWorldHint: false }
+  const removes = !/^(create|tag|commit|restore|append)_/.test(name)
   return { readOnlyHint: false, destructiveHint: removes, openWorldHint: false }
 }
 
@@ -91,14 +102,61 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
   )
   tool(
     mcp,
+    'get_tree',
+    'The layout of the memory: the folders under a folder, nested, each with how many files it holds at any depth. Start here to know where things are.',
+    {
+      folder: z.string().optional().describe('the folder to start from, like /notes/; the root by default'),
+      depth: z.number().int().min(0).optional().describe('levels of folders to show; 0 or left out is every level'),
+    },
+    (i) => folders.tree(i.folder, i.depth),
+  )
+  tool(
+    mcp,
+    'list_folder',
+    'What one folder holds: the folders right under it (with how many files each) and its own files, without their content.',
+    {
+      folder: z.string().optional().describe('like /notes/; the root by default'),
+      with_metadata: z.boolean().optional().describe('give each file its metadata too'),
+    },
+    (i) => folders.contents(i.folder, { withMetadata: i.with_metadata }),
+  )
+  tool(
+    mcp,
+    'search_files',
+    'Find files by words: every word of the query must appear, in any order, ignoring case. By default in the file name or the content; in: "path" also matches folder names, "content" only the text. Content hits carry a snippet. Narrow it by folder, tags or category.',
+    {
+      query: z.string().describe('the words to find'),
+      folder: z.string().optional().describe('only files under this folder, like /notes/'),
+      in: z.enum(SEARCH_IN).optional().describe('name, path (folders included), content, or all (name and content, the default)'),
+      exact: z.boolean().optional().describe('find the query as one literal piece instead of word by word'),
+      tags: z.array(z.string()).optional().describe('tag names the file must all carry'),
+      category_id: z.string().optional().describe('a category or subcategory id, from list_categories'),
+      limit: z.number().int().min(1).max(1000).optional().describe('at most this many files; 50 by default'),
+      with_metadata: z.boolean().optional().describe('give each file its metadata too'),
+    },
+    (i) =>
+      files.search({
+        prefix: i.folder,
+        query: i.query.trim() ? i.query : undefined,
+        in: i.in,
+        words: !i.exact,
+        tags: i.tags,
+        categoryId: i.category_id,
+        limit: i.limit ?? 50,
+        withMetadata: i.with_metadata,
+      }),
+  )
+  tool(
+    mcp,
     'list_files',
-    'List files, without their content. Every argument narrows the list: a folder, a text to find in the file name or the content, tags the file must all carry, a category (which includes its subcategories).',
+    'List files, without their content, everything under a folder at any depth. Every argument narrows the list: a folder, a text to find as one literal piece, tags the file must all carry, a category (which includes its subcategories). To find files by words, use search_files.',
     {
       folder: z.string().optional().describe('only files under this folder, like /notes/'),
       query: z.string().optional().describe('text to find, ignoring case'),
-      in: z.enum(['name', 'content', 'all']).optional().describe('where to find it; both by default'),
+      in: z.enum(SEARCH_IN).optional().describe('where to find it: name, path, content, or all (name and content, the default)'),
       tags: z.array(z.string()).optional().describe('tag names the file must all carry'),
       category_id: z.string().optional().describe('a category or subcategory id, from list_categories'),
+      limit: z.number().int().min(1).max(1000).optional().describe('at most this many files'),
       with_metadata: z.boolean().optional().describe('give each file its metadata too'),
     },
     (i) =>
@@ -108,10 +166,21 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
         in: i.in,
         tags: i.tags,
         categoryId: i.category_id,
+        limit: i.limit,
         withMetadata: i.with_metadata,
       }),
   )
-  tool(mcp, 'read_file', 'Read a file: content, metadata, revision, category and tags.', fileRef, (i) => files.find(i))
+  tool(
+    mcp,
+    'read_file',
+    'Read a file: content, metadata, revision, category and tags. offset (the first line, from 1) and limit read only some lines of a long file, and say how many it has in total_lines.',
+    {
+      ...fileRef,
+      offset: z.number().int().min(1).optional().describe('the first line to read, from 1'),
+      limit: z.number().int().min(1).optional().describe('how many lines to read'),
+    },
+    async (i) => files.lines(await files.find(i), { offset: i.offset, limit: i.limit }),
+  )
   tool(
     mcp,
     'create_file',
@@ -122,6 +191,30 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
       metadata: z.record(z.string(), z.unknown()).optional().describe('a JSON object for your own notes'),
     },
     (i) => files.create(i, writer()),
+  )
+  tool(
+    mcp,
+    'write_file',
+    'Write a whole file: create it at its path (its folders need no creating), or replace the content of the one there. Metadata, when given, replaces the old; left out, it stays. if_absent only creates; if_revision only replaces that revision.',
+    {
+      path: z.string().describe('absolute path, like /notes/today.md'),
+      content: z.string(),
+      metadata: z.record(z.string(), z.unknown()).optional().describe('a JSON object for your own notes'),
+      if_absent: z.boolean().optional().describe('only create; fail if the path is taken'),
+      if_revision: ifRevision,
+    },
+    (i) =>
+      files.write(
+        { path: i.path, content: i.content, metadata: i.metadata, ifAbsent: i.if_absent, ifRevision: i.if_revision },
+        writer(),
+      ),
+  )
+  tool(
+    mcp,
+    'append_file',
+    'Add text at the end of a file, creating it when missing. Nothing is put in between: start the text with a newline if it needs one. Safe while others write the same file.',
+    { path: z.string().describe('absolute path, like /notes/log.md'), content: z.string() },
+    (i) => files.append(i.path, i.content, writer()),
   )
   tool(
     mcp,
@@ -146,11 +239,21 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
   tool(
     mcp,
     'edit_file',
-    'Replace one exact piece of a file content with another. old_string must appear exactly once.',
-    { ...fileRef, old_string: z.string(), new_string: z.string(), if_revision: ifRevision },
+    'Replace one exact piece of a file content with another. old_string must appear exactly once, unless replace_all replaces every time it appears.',
+    {
+      ...fileRef,
+      old_string: z.string(),
+      new_string: z.string(),
+      replace_all: z.boolean().optional().describe('replace every occurrence'),
+      if_revision: ifRevision,
+    },
     async (i) => {
       const file = await files.find(i)
-      return files.edit(file.id, { oldString: i.old_string, newString: i.new_string, ifRevision: i.if_revision }, writer())
+      return files.edit(
+        file.id,
+        { oldString: i.old_string, newString: i.new_string, replaceAll: i.replace_all, ifRevision: i.if_revision },
+        writer(),
+      )
     },
   )
   tool(mcp, 'delete_file', 'Move a file to the trash. It keeps its history and tags, and restore_file brings it back.', fileRef, async (i) => {
@@ -172,7 +275,7 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
     (i) => files.emptyTrash(i.id),
   )
 
-  tool(mcp, 'list_folders', 'List every folder, empty ones included, like /notes/.', {}, () => folders.list())
+  tool(mcp, 'list_folders', 'List every folder as a flat list of paths, empty ones included, like /notes/. get_tree shows them nested, with file counts.', {}, () => folders.list())
   tool(
     mcp,
     'create_folder',
@@ -187,8 +290,12 @@ export function coreTools(mcp: McpServer, { files, folders, tags, categories, or
     { from: z.string(), to: z.string() },
     async (i) => ({ path: await files.moveFolder(i.from, i.to, writer()) }),
   )
-  tool(mcp, 'delete_folder', 'Delete an empty folder. A folder with files keeps them: delete or move them first.', { path: z.string() }, (i) =>
-    folders.remove(i.path),
+  tool(
+    mcp,
+    'delete_folder',
+    'Delete a folder. Without recursive it must be empty; with recursive its files go to the trash too, where they keep their history and restore_file brings them back.',
+    { path: z.string().describe('like /notes/old/'), recursive: z.boolean().optional() },
+    (i) => folders.remove(i.path, { recursive: i.recursive }),
   )
   tool(
     mcp,

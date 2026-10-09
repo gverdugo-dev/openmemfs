@@ -78,7 +78,7 @@ bun run check          # types and tests
 - **Explorer**: new files and folders, drag and drop, a right-click menu, a sidebar you can resize
   and fold, light and dark.
 - **Tags, categories and search**: tags on files and folders, categories with subcategories, and
-  search by name or content with filters.
+  search by every word of a query in names, paths or content, with filters.
 
 ## Guides
 

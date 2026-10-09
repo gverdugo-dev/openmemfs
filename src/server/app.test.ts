@@ -263,7 +263,7 @@ describe.skipIf(!url)('the API', () => {
     expect((await call('DELETE', '/folders?path=/ideas/')).status).toBe(409)
     const file = await json(await call('GET', '/files/by-path?path=/ideas/later/one.md'))
     await call('DELETE', `/files/${file.body.id}`)
-    expect((await call('DELETE', '/folders?path=/ideas/')).status).toBe(204)
+    expect((await call('DELETE', '/folders?path=/ideas/')).status).toBe(200)
     expect((await json(await call('GET', '/folders'))).body).toEqual(['/docs/'])
     expect((await call('DELETE', '/folders?path=/ideas/')).status).toBe(404)
   })
@@ -331,6 +331,147 @@ describe.skipIf(!url)('the API', () => {
 
     const rules = await callTool('get_organisation', {})
     expect(rules.value).toMatchObject({ path: '/organisation.md', seeded: true })
+  })
+
+  test('search finds every word, in names, whole paths or content', async () => {
+    await call('POST', '/files', { path: '/projects/zeporro/ideas.md', content: 'A burger with legs walks into town' })
+    await call('POST', '/files', { path: '/notes/burger.md', content: 'nothing here' })
+    await call('POST', '/files', { path: '/notes/legs.md', content: 'walks only' })
+    const paths = async (q: string) => (await json(await call('GET', `/files?${q}`))).body.map((e: { path: string }) => e.path)
+
+    expect(await paths('q=legs burger&words=true')).toEqual(['/projects/zeporro/ideas.md'])
+    expect(await paths('q=legs burger')).toEqual([])
+    expect(await paths('q=zeporro&in=path')).toEqual(['/projects/zeporro/ideas.md'])
+    expect(await paths('q=zeporro')).toEqual([])
+    expect(await paths('q=burger&in=name')).toEqual(['/notes/burger.md'])
+    expect(await paths('limit=2')).toHaveLength(2)
+    expect((await call('GET', '/files?limit=0')).status).toBe(400)
+    expect((await call('GET', '/files?in=everywhere')).status).toBe(400)
+    const hit = (await json(await call('GET', '/files?q=town walks&words=true&in=content'))).body
+    expect(hit.map((e: { path: string }) => e.path)).toEqual(['/projects/zeporro/ideas.md'])
+    expect(hit[0].snippet).toContain('town')
+  })
+
+  test('the tree and the contents of a folder', async () => {
+    await call('POST', '/files', { path: '/a/one.md' })
+    await call('POST', '/files', { path: '/a/b/two.md' })
+    await call('POST', '/files', { path: '/a/b/c/three.md' })
+    await call('POST', '/folders', { path: '/a/empty/' })
+    await call('POST', '/files', { path: '/top.md' })
+    const tree = (await json(await call('GET', '/folders/tree'))).body
+    expect(tree).toMatchObject({ path: '/', files: 4 })
+    const a = tree.folders.find((f: { path: string }) => f.path === '/a/')
+    expect(a).toMatchObject({ name: 'a', files: 3 })
+    expect(a.folders.map((f: { name: string; files: number }) => [f.name, f.files])).toEqual([['b', 2], ['empty', 0]])
+    expect(a.folders[0].folders[0]).toMatchObject({ path: '/a/b/c/', files: 1, folders: [] })
+
+    const shallow = (await json(await call('GET', '/folders/tree?path=/a/&depth=1'))).body
+    expect(shallow.folders[0]).toMatchObject({ path: '/a/b/', files: 2, folders: [] })
+    expect((await call('GET', '/folders/tree?path=/nope/')).status).toBe(404)
+
+    const contents = (await json(await call('GET', '/folders/contents?path=/a/'))).body
+    expect(contents.folders).toEqual([
+      { path: '/a/b/', name: 'b', files: 2 },
+      { path: '/a/empty/', name: 'empty', files: 0 },
+    ])
+    expect(contents.files.map((f: { path: string }) => f.path)).toEqual(['/a/one.md'])
+  })
+
+  test('reads a window of lines, writes, appends and replaces every occurrence', async () => {
+    const written = await json(await call('PUT', '/files/by-path', { path: '/w.md', content: 'one\ntwo\nthree\nfour' }))
+    expect(written.body.revision).toBe(1)
+    const window = (await json(await call('GET', '/files/by-path?path=/w.md&offset=2&limit=2'))).body
+    expect(window).toMatchObject({ content: 'two\nthree', total_lines: 4, offset: 2 })
+    expect((await call('GET', '/files/by-path?path=/w.md&offset=0')).status).toBe(400)
+
+    const replaced = await json(await call('PUT', '/files/by-path', { path: '/w.md', content: 'a a a', if_revision: 1 }))
+    expect(replaced.body).toMatchObject({ content: 'a a a', revision: 2 })
+    expect((await call('PUT', '/files/by-path', { path: '/w.md', content: 'x', if_revision: 1 })).status).toBe(409)
+    expect((await call('PUT', '/files/by-path', { path: '/w.md', content: 'x', if_absent: true })).status).toBe(409)
+    expect((await call('PUT', '/files/by-path', { path: '/gone.md', content: 'x', if_revision: 3 })).status).toBe(409)
+
+    const edited = await json(await call('POST', `/files/${written.body.id}/edit`, { old_string: 'a', new_string: 'b', replace_all: true }))
+    expect(edited.body.content).toBe('b b b')
+    expect((await call('POST', `/files/${written.body.id}/edit`, { old_string: 'zzz', new_string: 'b' })).status).toBe(400)
+
+    await call('POST', '/files/append', { path: '/log.md', content: 'first' })
+    const appended = await json(await call('POST', '/files/append', { path: '/log.md', content: '\nsecond' }))
+    expect(appended.body).toMatchObject({ content: 'first\nsecond', revision: 2 })
+  })
+
+  test('deletes a folder with its files to the trash', async () => {
+    await call('POST', '/files', { path: '/old/a.md' })
+    await call('POST', '/files', { path: '/old/b/c.md' })
+    expect((await call('DELETE', '/folders?path=/old/')).status).toBe(409)
+    const gone = await json(await call('DELETE', '/folders?path=/old/&recursive=true'))
+    expect(gone.body).toEqual({ trashed: ['/old/a.md', '/old/b/c.md'] })
+    expect((await json(await call('GET', '/folders'))).body).toEqual([])
+    expect((await json(await call('GET', '/trash'))).body).toHaveLength(2)
+    expect((await call('DELETE', '/folders?path=/&recursive=true')).status).toBe(400)
+  })
+
+  test('changes, commits across files, the log and diffs', async () => {
+    const a = await json(await call('POST', '/files', { path: '/h/a.md', content: 'one\ntwo' }))
+    await call('POST', '/files', { path: '/h/b.md', content: 'b' })
+    await call('POST', '/files', { path: '/other.md', content: 'o' })
+    const changes = (await json(await call('GET', '/history/changes?prefix=/h/'))).body
+    expect(changes.map((c: { path: string; committed: number | null }) => [c.path, c.committed])).toEqual([
+      ['/h/a.md', null],
+      ['/h/b.md', null],
+    ])
+
+    const committed = await json(await call('POST', '/history/commit', { prefix: '/h/', message: 'First notes' }))
+    expect(committed.status).toBe(201)
+    expect(committed.body).toHaveLength(2)
+    expect((await call('POST', '/history/commit', { prefix: '/h/', message: 'Again' })).status).toBe(400)
+    expect((await json(await call('GET', '/history/changes'))).body.map((c: { path: string }) => c.path)).toEqual(['/other.md'])
+
+    await call('PATCH', `/files/${a.body.id}`, { content: 'one\nTWO\nthree', checkpoint: true })
+    const diff = (await json(await call('GET', `/files/${a.body.id}/diff`))).body
+    expect(diff).toMatchObject({ from: 1, to: null, added: 2, removed: 1, metadata_changed: false })
+    expect(diff.diff).toBe(' one\n-two\n+TWO\n+three')
+    expect((await json(await call('GET', `/files/${a.body.id}/diff?from=1&to=2`))).body.to).toBe(2)
+
+    const log = (await json(await call('GET', '/history/commits'))).body
+    expect(log.map((c: { path: string; message: string }) => [c.path, c.message]).sort()).toEqual([
+      ['/h/a.md', 'First notes'],
+      ['/h/b.md', 'First notes'],
+    ])
+    expect((await call('GET', '/history/commits?limit=0')).status).toBe(400)
+  })
+
+  test('MCP has the tools an agent needs to find its way', async () => {
+    const rpc = (method: string, params: unknown) =>
+      app.request('http://localhost/mcp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      })
+    const callTool = async (name: string, args: unknown) => {
+      const { result } = (await (await rpc('tools/call', { name, arguments: args })).json()) as any
+      const text: string = result.content[0].text
+      return { error: result.isError === true, value: result.isError ? text : JSON.parse(text) }
+    }
+    const tools = ((await (await rpc('tools/list', {})).json()) as any).result.tools as { name: string; annotations: any }[]
+    const byName = new Map(tools.map((t) => [t.name, t]))
+    for (const name of ['get_tree', 'list_folder', 'search_files', 'write_file', 'append_file', 'get_diff', 'list_changes', 'commit_changes', 'list_commits']) {
+      expect(byName.has(name)).toBe(true)
+    }
+    expect(byName.get('search_files')!.annotations.readOnlyHint).toBe(true)
+    expect(byName.get('append_file')!.annotations.destructiveHint).toBe(false)
+
+    await callTool('write_file', { path: '/agent/plan.md', content: 'Ship the search tools\nthen the tree' })
+    await callTool('append_file', { path: '/agent/plan.md', content: '\nthen commit' })
+    const found = await callTool('search_files', { query: 'tree ship' })
+    expect(found.value.map((e: { path: string }) => e.path)).toEqual(['/agent/plan.md'])
+    expect((await callTool('search_files', { query: 'tree ship', exact: true })).value).toEqual([])
+    expect((await callTool('get_tree', {})).value.folders[0]).toMatchObject({ path: '/agent/', files: 1 })
+    expect((await callTool('list_folder', { folder: '/agent/' })).value.files).toHaveLength(1)
+    expect((await callTool('read_file', { path: '/agent/plan.md', offset: 3 })).value).toMatchObject({ content: 'then commit', total_lines: 3 })
+    expect((await callTool('list_changes', {})).value.map((c: { path: string }) => c.path)).toContain('/agent/plan.md')
+    expect((await callTool('get_diff', { path: '/agent/plan.md' })).value.to).toBe(null)
+    expect((await callTool('commit_changes', { folder: '/agent/', message: 'Plan' })).value).toHaveLength(1)
+    expect((await callTool('list_commits', {})).value[0]).toMatchObject({ path: '/agent/plan.md', message: 'Plan' })
   })
 
   test('/organisation.md is written from the template once, and cannot be moved or deleted', async () => {

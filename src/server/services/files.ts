@@ -61,14 +61,27 @@ export interface Trashed {
   deleted_at: Date
 }
 
+export const SEARCH_IN = ['name', 'path', 'content', 'all'] as const
+export type SearchIn = (typeof SEARCH_IN)[number]
+
 /** What to look for. Every field narrows the list; leave them all out to list everything. */
 export interface Search {
   /** Only files under this folder ("/notes/"). */
   prefix?: string
   /** Text to find, ignoring case. */
   query?: string
-  /** Where to find it: the file name, the content, or both (the default). */
-  in?: 'name' | 'content' | 'all'
+  /**
+   * Where to find it: the file name, the whole path (folders included), the content, or the
+   * name and the content (the default).
+   */
+  in?: SearchIn
+  /**
+   * Find every word of the query, in any order and each anywhere in the chosen places,
+   * instead of the query as one literal piece. What an agent usually wants.
+   */
+  words?: boolean
+  /** At most this many entries (1 to 1000). */
+  limit?: number
   /** Only files that carry every one of these tags, on themselves or on a folder above them. */
   tags?: string[]
   /** Only files in this category, or in one of its subcategories. */
@@ -94,11 +107,31 @@ export interface UpdateFile {
   checkpoint?: boolean
 }
 
-/** Replace one exact piece of the content, which must appear exactly once. */
+/** Replace one exact piece of the content, which must appear exactly once (or everywhere with `replaceAll`). */
 export interface EditFile {
   oldString: string
   newString: string
+  replaceAll?: boolean
   ifRevision?: number
+}
+
+/** Create a file or replace the one at its path. Metadata left out stays as it is. */
+export interface WriteFile {
+  path: string
+  content: string
+  metadata?: Metadata
+  /** Only create: a `conflict` error if the path is taken. */
+  ifAbsent?: boolean
+  /** Only replace the file at this revision: a `stale` error if it moved on or is gone. */
+  ifRevision?: number
+}
+
+/** A file with only some of its lines, for reading a long file a piece at a time. */
+export type FileLines = File & {
+  /** How many lines the whole content has. */
+  total_lines: number
+  /** The first line given, from 1. */
+  offset: number
 }
 
 /** Who is writing, and whether this write should start a new version rather than fold into the last. */
@@ -129,6 +162,9 @@ export const MAX_CONTENT_BYTES = 1024 * 1024
 export const MAX_METADATA_BYTES = 64 * 1024
 const SNIPPET_BEFORE = 60
 const SNIPPET_LENGTH = 180
+const MAX_SEARCH_LIMIT = 1000
+/** The most times append retries when someone writes the same file in between. */
+const APPEND_ATTEMPTS = 3
 
 export type Files = ReturnType<typeof createFiles>
 
@@ -154,11 +190,19 @@ export function createFiles(sql: Sql, hooks: FileHooks = {}, tb: Tables = tables
       const prefix = search.prefix ?? '/'
       if (!prefix.startsWith('/')) throw invalid('prefix must start with "/"')
       const where = search.in ?? 'all'
-      if (!['name', 'content', 'all'].includes(where)) throw invalid('in must be "name", "content" or "all"')
+      if (!SEARCH_IN.includes(where)) throw invalid(`in must be one of ${SEARCH_IN.join(', ')}`)
+      const limit = search.limit ?? null
+      if (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > MAX_SEARCH_LIMIT))
+        throw invalid(`limit must be an integer from 1 to ${MAX_SEARCH_LIMIT}`)
       const query = search.query?.trim() || null
-      const pattern = query && likePattern(query)
-      const byName = query !== null && where !== 'content'
-      const byContent = query !== null && where !== 'name'
+      // Each piece must appear somewhere: the whole query, or every word of it.
+      const pieces = query === null ? [] : search.words ? [...new Set(query.split(/\s+/))] : [query]
+      const patterns = pieces.map(likePattern)
+      const byName = where === 'name' || where === 'all'
+      const byPath = where === 'path'
+      const byContent = where === 'content' || where === 'all'
+      // The snippet shows the content around the first piece found there.
+      const needle = byContent ? (pieces[0] ?? null) : null
       const tags = [...new Set((search.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean))]
       const categoryId = search.categoryId ? checkId(search.categoryId, 'category') : null
 
@@ -170,15 +214,17 @@ export function createFiles(sql: Sql, hooks: FileHooks = {}, tb: Tables = tables
             where starts_with(f.path, dt.folder)
           ), '{}') as folder_tags,
           ${search.withMetadata ? sql`f.metadata` : sql`null`} as metadata,
-          case when ${byContent} and f.content ilike ${pattern} then
-            substr(f.content, greatest(strpos(lower(f.content), lower(${query})) - ${SNIPPET_BEFORE}, 1), ${SNIPPET_LENGTH})
+          case when ${needle}::text is not null and strpos(lower(f.content), lower(${needle})) > 0 then
+            substr(f.content, greatest(strpos(lower(f.content), lower(${needle})) - ${SNIPPET_BEFORE}, 1), ${SNIPPET_LENGTH})
           end as snippet
         from ${tb.files} f
         left join ${tb.categories} c on c.id = f.category_id
         where f.deleted_at is null and starts_with(f.path, ${prefix}) and ${reachable(sql, sql`f.path`)}
-          and (${query}::text is null
-            or (${byName} and regexp_replace(f.path, '^.*/', '') ilike ${pattern})
-            or (${byContent} and f.content ilike ${pattern}))
+          and not exists (
+            select 1 from unnest(${patterns}::text[]) as piece(pattern)
+            where not ((${byName} and regexp_replace(f.path, '^.*/', '') ilike piece.pattern)
+              or (${byPath} and f.path ilike piece.pattern)
+              or (${byContent} and f.content ilike piece.pattern)))
           and (${categoryId}::uuid is null or f.category_id = ${categoryId} or c.parent_id = ${categoryId})
           and not exists (
             select 1 from unnest(${tags}::text[]) as wanted(name)
@@ -189,7 +235,8 @@ export function createFiles(sql: Sql, hooks: FileHooks = {}, tb: Tables = tables
               select 1 from ${tb.folder_tags} dt join ${tb.tags} t on t.id = dt.tag_id
               where starts_with(f.path, dt.folder) and lower(t.name) = wanted.name
             ))
-        order by f.path collate "C"`
+        order by f.path collate "C"
+        limit ${limit}`
     },
 
     async get(id: string): Promise<File> {
@@ -208,6 +255,57 @@ export function createFiles(sql: Sql, hooks: FileHooks = {}, tb: Tables = tables
       if (ref.id) return files.get(ref.id)
       if (ref.path) return files.getByPath(ref.path)
       throw invalid('give the file id or its path')
+    },
+
+    /**
+     * A file with only `limit` of its lines from line `offset` (from 1), and how many lines it
+     * has, so a long file is read a piece at a time. Both left out: the whole file.
+     */
+    lines(file: File, window: { offset?: unknown; limit?: unknown }): File | FileLines {
+      if (window.offset === undefined && window.limit === undefined) return file
+      const offset = window.offset === undefined ? 1 : Number(window.offset)
+      const limit = window.limit === undefined ? undefined : Number(window.limit)
+      if (!Number.isInteger(offset) || offset < 1) throw invalid('offset must be a line number, from 1')
+      if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) throw invalid('limit must be a positive integer')
+      const all = file.content === '' ? [] : file.content.split('\n')
+      const content = all.slice(offset - 1, limit === undefined ? undefined : offset - 1 + limit).join('\n')
+      return { ...file, content, total_lines: all.length, offset }
+    },
+
+    /**
+     * Creates the file at a path, or replaces the content (and the metadata, when given) of
+     * the one there. What an agent means by "write this file".
+     */
+    async write(input: WriteFile, write: Write): Promise<File> {
+      if (input.ifAbsent && input.ifRevision !== undefined) throw invalid('if_absent and if_revision do not go together')
+      checkRevision(input.ifRevision)
+      if (input.ifAbsent) return files.create(input, write)
+      const existing = await files.getByPath(input.path).catch((error) => {
+        if (error instanceof DomainError && error.code === 'not_found') return null
+        throw error
+      })
+      if (existing) return files.update(existing.id, { content: input.content, metadata: input.metadata, ifRevision: input.ifRevision }, write)
+      if (input.ifRevision !== undefined) throw new DomainError('stale', `${input.path} is gone since revision ${input.ifRevision}`)
+      return files.create(input, write)
+    },
+
+    /** Adds text at the end of a file, creating it when missing. Nothing goes in between. */
+    async append(path: string, text: unknown, write: Write): Promise<File> {
+      const addition = checkContent(text)
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const file = await files.getByPath(path).catch((error) => {
+            if (error instanceof DomainError && error.code === 'not_found') return null
+            throw error
+          })
+          if (!file) return await files.create({ path, content: addition }, write)
+          return await files.update(file.id, { content: file.content + addition, ifRevision: file.revision }, write)
+        } catch (error) {
+          // Someone wrote, or created the file, in between: read it again and add to what is there.
+          const raced = error instanceof DomainError && (error.code === 'stale' || error.code === 'conflict')
+          if (!raced || attempt >= APPEND_ATTEMPTS) throw error
+        }
+      }
     },
 
     async create(input: CreateFile, write: Write): Promise<File> {
@@ -272,10 +370,13 @@ export function createFiles(sql: Sql, hooks: FileHooks = {}, tb: Tables = tables
       const current = await files.get(id)
       if (input.ifRevision !== undefined && input.ifRevision !== current.revision) throw staleError(current, input.ifRevision)
       const count = current.content.split(input.oldString).length - 1
-      if (count !== 1) {
-        throw invalid(`old_string appears ${count} times in ${current.path}; it must appear exactly once`)
+      if (count === 0) throw invalid(`old_string does not appear in ${current.path}`)
+      if (count !== 1 && !input.replaceAll) {
+        throw invalid(`old_string appears ${count} times in ${current.path}; it must appear exactly once, or pass replace_all`)
       }
-      const content = current.content.replace(input.oldString, () => input.newString)
+      const content = input.replaceAll
+        ? current.content.split(input.oldString).join(input.newString)
+        : current.content.replace(input.oldString, () => input.newString)
       return files.update(id, { content, ifRevision: current.revision }, write)
     },
 
@@ -394,6 +495,21 @@ export function createFiles(sql: Sql, hooks: FileHooks = {}, tb: Tables = tables
     },
   }
   return files
+}
+
+/**
+ * Moves every file under a folder to the trash, inside the caller's transaction (a folder
+ * deleted with everything in it). Returns their paths. The root holds /organisation.md and
+ * cannot go.
+ */
+export async function trashFolder(tb: Tables, tx: Tx, folder: string): Promise<string[]> {
+  if (folder === '/') throw invalid('the root cannot be deleted')
+  const rows = await tx<{ path: string }[]>`
+    update ${tb.files} set deleted_at = now()
+    where deleted_at is null and starts_with(path, ${folder}) and ${reachable(tx, tx`path`)}
+    returning path`
+  await dropOrphanFolderTags(tb, tx)
+  return rows.map((r) => r.path).sort()
 }
 
 /** The direct tags of the file aliased `f`, sorted, as a SQL fragment. */

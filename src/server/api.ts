@@ -16,14 +16,37 @@ export function coreRoutes(api: Api, { files, folders, tags, categories, organis
       prefix: c.req.query('prefix'),
       query: c.req.query('q'),
       in: c.req.query('in') as Search['in'],
+      words: c.req.query('words') === 'true',
+      limit: c.req.query('limit') === undefined ? undefined : Number(c.req.query('limit')),
       tags: c.req.queries('tag'),
       categoryId: c.req.query('category'),
       withMetadata: c.req.query('metadata') === 'true',
     }
     return c.json(await files.search(search))
   })
-  api.get('/files/by-path', async (c) => c.json(await files.getByPath(c.req.query('path') ?? '')))
-  api.get('/files/:id', async (c) => c.json(await files.get(c.req.param('id'))))
+  // offset and limit read a window of lines of a long file.
+  const lines = (c: { req: { query: (k: string) => string | undefined } }) => ({ offset: c.req.query('offset'), limit: c.req.query('limit') })
+  api.get('/files/by-path', async (c) => c.json(files.lines(await files.getByPath(c.req.query('path') ?? ''), lines(c))))
+  // Create the file at a path, or replace the one there.
+  api.put('/files/by-path', async (c) => {
+    const input = await body<{ path?: unknown; content?: unknown; metadata?: unknown; if_absent?: unknown; if_revision?: unknown }>(c.req.raw)
+    const file = await files.write(
+      {
+        path: input.path as string,
+        content: input.content as string,
+        metadata: input.metadata as never,
+        ifAbsent: input.if_absent === true,
+        ifRevision: input.if_revision as number | undefined,
+      },
+      { author: c.get('author') },
+    )
+    return c.json(file)
+  })
+  api.post('/files/append', async (c) => {
+    const { path, content } = await body<{ path?: unknown; content?: unknown }>(c.req.raw)
+    return c.json(await files.append(path as string, content, { author: c.get('author') }))
+  })
+  api.get('/files/:id', async (c) => c.json(files.lines(await files.get(c.req.param('id')), lines(c))))
   api.post('/files', async (c) => {
     const input = await body<{ path?: unknown; content?: unknown; metadata?: unknown }>(c.req.raw)
     const file = await files.create(
@@ -54,12 +77,13 @@ export function coreRoutes(api: Api, { files, folders, tags, categories, organis
     return c.json(file)
   })
   api.post('/files/:id/edit', async (c) => {
-    const input = await body<{ old_string?: unknown; new_string?: unknown; if_revision?: unknown }>(c.req.raw)
+    const input = await body<{ old_string?: unknown; new_string?: unknown; replace_all?: unknown; if_revision?: unknown }>(c.req.raw)
     const file = await files.edit(
       c.req.param('id'),
       {
         oldString: input.old_string as string,
         newString: input.new_string as string,
+        replaceAll: input.replace_all === true,
         ifRevision: input.if_revision as number | undefined,
       },
       { author: c.get('author') },
@@ -97,6 +121,10 @@ export function coreRoutes(api: Api, { files, folders, tags, categories, organis
 
   // Folders. One exists while a file is in it, or because someone created it (then it may be empty).
   api.get('/folders', async (c) => c.json(await folders.list()))
+  api.get('/folders/tree', async (c) => c.json(await folders.tree(c.req.query('path'), c.req.query('depth'))))
+  api.get('/folders/contents', async (c) =>
+    c.json(await folders.contents(c.req.query('path'), { withMetadata: c.req.query('metadata') === 'true' })),
+  )
   api.post('/folders', async (c) => {
     const { path } = await body<{ path?: unknown }>(c.req.raw)
     return c.json({ path: await folders.create(path) }, 201)
@@ -105,10 +133,9 @@ export function coreRoutes(api: Api, { files, folders, tags, categories, organis
     const { from, to } = await body<{ from?: unknown; to?: unknown }>(c.req.raw)
     return c.json({ path: await files.moveFolder(from, to, { author: c.get('author') }) })
   })
-  api.delete('/folders', async (c) => {
-    await folders.remove(c.req.query('path') ?? '')
-    return c.body(null, 204)
-  })
+  api.delete('/folders', async (c) =>
+    c.json(await folders.remove(c.req.query('path') ?? '', { recursive: c.req.query('recursive') === 'true' })),
+  )
 
   // A folder's tags. The folder goes in the query: it has slashes of its own.
   api.get('/folders/tags', async (c) => c.json(await tags.ofFolder(c.req.query('folder') ?? '')))

@@ -75,3 +75,19 @@ export function hunks(lines: DiffLine[], context = 3): (DiffLine | null)[] {
   if (out.at(-1) === null) out.pop()
   return out
 }
+
+/**
+ * A diff as text for a reader that is not a screen, such as an agent: `+` added, `-` removed,
+ * a space for context, and `@@` where unchanged lines were left out.
+ */
+export function diffText(before: string, after: string, context = 3): { diff: string; added: number; removed: number } {
+  const lines = diffLines(before, after)
+  const diff = hunks(lines, context)
+    .map((l) => (l === null ? '@@' : `${l.kind === 'add' ? '+' : l.kind === 'del' ? '-' : ' '}${l.text}`))
+    .join('\n')
+  return {
+    diff,
+    added: lines.filter((l) => l.kind === 'add').length,
+    removed: lines.filter((l) => l.kind === 'del').length,
+  }
+}

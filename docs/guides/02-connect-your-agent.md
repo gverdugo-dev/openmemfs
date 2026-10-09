@@ -24,9 +24,20 @@ claude mcp add --transport http openmemfs https://memory.example.com/mcp \
 
 ## What your agent can do
 
-Everything you can do in the interface: list and search files, read, create, edit, move and
-delete them, create and move folders, tag files and folders, manage categories, commit and restore
-versions. Ask it "what do you know about my project X?" and it will search here.
+Everything you can do in the interface, and the tools an agent needs to find its way:
+
+- **Find**: `get_tree` (the folders, nested, with how many files each holds), `list_folder` (what
+  one folder holds), `search_files` (every word of a query, in names, whole paths or content, with
+  a snippet) and `list_files` (filters by folder, tags and category).
+- **Read and write**: `read_file` (a window of lines for long files), `write_file` (create or
+  replace), `edit_file` (one exact piece, or every occurrence), `append_file`, `update_file` (move,
+  rename, metadata) and the trash.
+- **Organise**: folders, tags on files and folders, categories and subcategories.
+- **History**: `list_changes` (what changed since the last commit), `get_diff`,
+  `commit_changes` (a folder or the whole memory, with one message), `list_commits`, and per file
+  `list_versions`, `read_version`, `commit_file` and `restore_version`.
+
+Ask it "what do you know about my project X?" and it will search here.
 
 Programs use the same operations through the REST API at `/api`.
 

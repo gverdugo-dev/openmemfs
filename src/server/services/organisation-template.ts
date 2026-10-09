@@ -100,10 +100,10 @@ OKF frontmatter is not the same thing as openmemfs **tags**, **categories** and 
 
 # Working here
 
-1. **Search before writing.** A second file on a subject that already has one is the failure a memory exists to prevent: update the one that exists.
+1. **Search before writing.** \`get_tree\` shows where things are and \`search_files\` finds them by their words. A second file on a subject that already has one is the failure a memory exists to prevent: update the one that exists.
 2. **Place it** with the folder rules above, then name it.
 3. **Write it** with its frontmatter. Prefer \`edit_file\` to rewriting a whole file, and pass \`if_revision\` so you never overwrite a change the owner just made.
-4. **Commit** when a coherent piece of work is done, with a message that says what changed and why.
+4. **Commit** when a coherent piece of work is done (\`commit_changes\`), with a message that says what changed and why.
 5. **Say where it went**: the path, in your answer.
 
 What never goes in: passwords, keys, tokens or card numbers, not even redacted. And nothing invented: a file records what the owner said or what a source says, never a guess written as a fact.

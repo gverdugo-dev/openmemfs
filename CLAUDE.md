@@ -154,8 +154,10 @@ at a database with data.
   (gray, brown, orange, yellow, green, blue, purple, pink, red). Without one, a new label gets a
   colour from its name, always the same for the same name.
 - Tags and the category are not content: changing them does not move the revision.
-- Search (`GET /api/files`, tool `list_files`): `q` in the file name, the content or both (`in`),
-  ignoring case and taken literally (`%` and `_` are not wildcards); every `tag` must be on the
+- Search (`GET /api/files`, tools `list_files` and `search_files`): `q` in the file name, the
+  whole path, the content, or name and content (`in`), ignoring case and taken literally (`%` and
+  `_` are not wildcards); `words=true` (what `search_files` does) finds every word of `q`, in any
+  order, instead of the whole of it; `limit`; every `tag` must be on the
   file or on a folder above it; `category`; `prefix` for a folder. A content hit carries a
   `snippet`.
 
@@ -175,12 +177,14 @@ it belongs in a module or in the deployment.
 
 ```
 GET    /api/organisation                          get_organisation (written from the template if missing)
-GET    /api/files?prefix&q&in&tag&tag&category&metadata=true   list_files      (no content; snippet on hits)
-GET    /api/files/by-path?path=/a.md              read_file
-GET    /api/files/:id                             read_file
+GET    /api/files?prefix&q&in&words&limit&tag&tag&category&metadata=true   list_files, search_files (words=true)
+GET    /api/files/by-path?path=/a.md&offset&limit read_file       (offset and limit: a window of lines)
+GET    /api/files/:id?offset&limit                read_file
+PUT    /api/files/by-path                         write_file      { path, content, metadata?, if_absent?, if_revision? }
+POST   /api/files/append                          append_file     { path, content } (creates it when missing)
 POST   /api/files                                 create_file     { path, content?, metadata? }
 PATCH  /api/files/:id                             update_file     { path?, content?, metadata?, if_revision?, checkpoint? }
-POST   /api/files/:id/edit                        edit_file       { old_string, new_string, if_revision? }
+POST   /api/files/:id/edit                        edit_file       { old_string, new_string, replace_all?, if_revision? }
 DELETE /api/files/:id                             delete_file     (to the trash)
 GET    /api/trash                                 list_trash
 POST   /api/trash/:id/restore                     restore_file    { path? }
@@ -190,9 +194,11 @@ PUT    /api/files/:id/category                    set_file_category  { category_
 POST   /api/files/:id/tags                        tag_file        { tag }
 DELETE /api/files/:id/tags/:tag                   untag_file
 GET    /api/folders                               list_folders    (empty ones included)
+GET    /api/folders/tree?path=/a/&depth=          get_tree        (nested, with file counts)
+GET    /api/folders/contents?path=/a/&metadata    list_folder     (its folders and its own files)
 POST   /api/folders                               create_folder   { path }
 POST   /api/folders/move                          move_folder     { from, to } (with everything in it)
-DELETE /api/folders?path=/a/                      delete_folder   (only when empty)
+DELETE /api/folders?path=/a/&recursive=true       delete_folder   (empty, or with recursive its files to the trash)
 GET    /api/folders/tags?folder=/a/               (read_file shows folder_tags)
 POST   /api/folders/tags                          tag_folder      { folder, tag }
 DELETE /api/folders/tags?folder=&tag=             untag_folder
@@ -208,9 +214,14 @@ GET    /api/files/:id/versions                    list_versions   (history modul
 GET    /api/files/:id/versions/:n                 read_version
 POST   /api/files/:id/commit                      commit_file     { message }
 POST   /api/files/:id/versions/:n/restore         restore_version { if_revision? }
+GET    /api/files/:id/diff?from&to                get_diff        (to: now, from: last commit, by default)
+GET    /api/history/changes?prefix=/a/            list_changes    (latest version not committed)
+POST   /api/history/commit                        commit_changes  { prefix?, message }
+GET    /api/history/commits?prefix&limit          list_commits
 ```
 
-The tools take a file by `path` (what agents usually know) or `id`. MCP is Streamable HTTP
+The tools take a file by `path` (what agents usually know) or `id`. A tool's name says what a
+client may assume (`annotationsOf`): `list_`, `read_`, `get_` and `search_` only read. MCP is Streamable HTTP
 without sessions at `/mcp`: every request builds its server, so any instance answers. Tool errors
 carry the same message as the API's; anything that is not a domain error is `internal error` and
 goes to the log.

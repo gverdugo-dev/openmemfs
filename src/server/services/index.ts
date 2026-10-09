@@ -17,13 +17,15 @@ export function createServices(sql: Sql, hooks: FileHooks = {}, tables: Tables =
   return {
     files,
     organisation: createOrganisation(files),
-    folders: createFolders(sql, tables),
+    folders: createFolders(sql, files, tables),
     tags: createTags(sql, tables),
     categories: createCategories(sql, tables),
   }
 }
 
-export type { Author, ContentLimit, Entry, File, FileHooks, Metadata, Search, Trashed, Write, WriteHook } from './files'
+export type { Author, ContentLimit, Entry, File, FileHooks, FileLines, Metadata, Search, SearchIn, Trashed, Write, WriteFile, WriteHook } from './files'
+export { SEARCH_IN } from './files'
+export type { FolderContents, FolderEntry, TreeFolder } from './folders'
 export type { Category } from './categories'
 export type { Organisation } from './organisation'
 export type { Tag } from './tags'
